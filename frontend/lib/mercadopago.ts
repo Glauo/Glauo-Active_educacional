@@ -73,7 +73,13 @@ async function getAccessToken(): Promise<string> {
   // 2. Configuração salva no banco de dados
   try {
     const boletoConfig = await dbGet<Record<string, unknown>>("boleto_config.json");
-    const dbToken = String(boletoConfig?.mp_access_token || "").trim();
+    const dbToken = String(
+      boletoConfig?.mp_access_token ||
+      boletoConfig?.mercado_pago_access_token ||
+      boletoConfig?.MERCADO_PAGO_ACCESS_TOKEN ||
+      boletoConfig?.access_token ||
+      ""
+    ).trim();
     if (dbToken && dbToken.startsWith("APP_USR")) return dbToken;
   } catch {
     // ignora erro de leitura do banco
@@ -89,7 +95,9 @@ async function getAccessToken(): Promise<string> {
  */
 async function getDefaultAddress(): Promise<MpPayerAddress> {
   try {
-    const config = await dbGet<Record<string, unknown>>("settings.json");
+    const config =
+      await dbGet<Record<string, unknown>>("sistema_config.json") ||
+      await dbGet<Record<string, unknown>>("settings.json");
     if (config) {
       const addr: MpPayerAddress = {
         zip_code: String(config.cep || config.zip_code || DEFAULT_ADDRESS.zip_code).replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2") || DEFAULT_ADDRESS.zip_code,
@@ -133,10 +141,25 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000${offset}`;
     })();
 
-  const cpfLimpo = (input.payer_cpf || "").replace(/\D/g, "");
+  const [boletoConfig, sistemaConfig] = await Promise.all([
+    dbGet<Record<string, unknown>>("boleto_config.json").catch(() => null),
+    dbGet<Record<string, unknown>>("sistema_config.json").catch(() => null),
+  ]);
+  const cpfLimpo = String(
+    input.payer_cpf ||
+    boletoConfig?.payer_document ||
+    boletoConfig?.cpf ||
+    boletoConfig?.cnpj ||
+    sistemaConfig?.cnpj ||
+    sistemaConfig?.cpf ||
+    process.env.ACTIVE_MERCADO_PAGO_PAYER_DOCUMENT ||
+    process.env.MERCADO_PAGO_PAYER_DOCUMENT ||
+    ""
+  ).replace(/\D/g, "");
   // Só envia CPF se tiver 11 dígitos e não for sequência de zeros
-  const cpfValido = cpfLimpo.length === 11 && !/^0+$/.test(cpfLimpo) && !/^(\d)\1{10}$/.test(cpfLimpo);
+  const cpfValido = (cpfLimpo.length === 11 || cpfLimpo.length === 14) && !/^0+$/.test(cpfLimpo) && !/^(\d)\1+$/.test(cpfLimpo);
   const cpfFinal = cpfValido ? cpfLimpo : null;
+  const cpfTipo = cpfFinal?.length === 14 ? "CNPJ" : "CPF";
 
   // Endereço: usa o do aluno se fornecido, senão busca o padrão da escola
   let address: MpPayerAddress;
@@ -155,7 +178,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
       email: input.payer_email || "pagador@activeeducacional.com.br",
       first_name: (input.payer_first_name || "Responsavel").slice(0, 60),
       last_name: (input.payer_last_name || "Financeiro").slice(0, 60),
-      ...(cpfFinal ? { identification: { type: "CPF", number: cpfFinal } } : {}),
+      ...(cpfFinal ? { identification: { type: cpfTipo, number: cpfFinal } } : {}),
       address: {
         zip_code: address.zip_code || DEFAULT_ADDRESS.zip_code,
         street_name: address.street_name || DEFAULT_ADDRESS.street_name,

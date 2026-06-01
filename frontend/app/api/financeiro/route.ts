@@ -50,6 +50,29 @@ function shouldSendWhatsApp(data: Record<string, unknown>) {
     text((data.notification_status as Record<string, unknown> | undefined)?.whatsapp) === "link_gerado";
 }
 
+function phoneOf(data: Record<string, unknown>) {
+  return text(
+    data.telefone ||
+    data.whatsapp ||
+    data.celular ||
+    data.responsavel_telefone ||
+    data.telefone_responsavel ||
+    data.celular_responsavel ||
+    data.whatsapp_responsavel ||
+    data.aluno_telefone
+  );
+}
+
+function emailOf(data: Record<string, unknown>) {
+  return text(
+    data.email ||
+    data.aluno_email ||
+    data.responsavel_email ||
+    data.email_responsavel ||
+    data.emailResponsavel
+  );
+}
+
 function runNotification(task: Promise<unknown>, label: string) {
   void task.catch((err) => {
     console.error(`[financeiro notificacao ${label}]`, err);
@@ -162,15 +185,13 @@ export async function POST(req: NextRequest) {
           status: data.status || "Boleto gerado",
         };
       } else {
-        // Falha na API do MP: registra o erro mas nao bloqueia o lancamento
-        boletoUpdate = {
-          boleto_status: "Erro MP",
-          boleto_erro: mpResult.error,
-          boleto_codigo: `AE-${String(id).slice(0, 8).toUpperCase()}`,
-          boleto_gerado_em: new Date().toISOString(),
-          status: data.status || "Boleto pendente",
-        };
         console.error("[financeiro POST] Erro Mercado Pago:", mpResult.error);
+        return NextResponse.json({
+          ok: false,
+          title: "Falha ao gerar boleto Mercado Pago",
+          error: mpResult.error || "Nao foi possivel gerar o boleto no Mercado Pago.",
+          detail: "Verifique Access Token, CPF/CNPJ, e-mail e endereco do pagador.",
+        }, { status: 422 });
       }
     } else if (data.gerar_boleto) {
       // Despesas: manter comportamento anterior (sem MP)
@@ -196,7 +217,7 @@ export async function POST(req: NextRequest) {
     if (tipo !== "despesas" && shouldSendWhatsApp(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
-        const result = await sendWhatsApp(novo.telefone || novo.whatsapp, message.body, session);
+        const result = await sendWhatsApp(phoneOf(novo), message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const notificationStatus = { ...(novo.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
         await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
@@ -205,7 +226,7 @@ export async function POST(req: NextRequest) {
     if (tipo !== "despesas" && shouldSendEmail(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
-        const result = await sendEmail(novo.email, message.subject, message.body, session);
+        const result = await sendEmail(emailOf(novo), message.subject, message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || novo;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
@@ -308,14 +329,14 @@ export async function PUT(req: NextRequest) {
           status: updates.status || "Boleto gerado",
         };
       } else {
-        boletoUpdate = {
-          boleto_status: "Erro MP",
-          boleto_erro: mpResult.error,
-          boleto_codigo: text(lancamentos[idx].boleto_codigo) || `AE-${String(id).slice(0, 8).toUpperCase()}`,
-          boleto_gerado_em: new Date().toISOString(),
-          status: updates.status || "Boleto pendente",
-        };
         console.error("[financeiro PUT] Erro Mercado Pago:", mpResult.error);
+        return NextResponse.json({
+          ok: false,
+          title: "Falha ao gerar boleto Mercado Pago",
+          error: mpResult.error || "Nao foi possivel gerar o boleto no Mercado Pago.",
+          detail: "Verifique Access Token, CPF/CNPJ, e-mail e endereco do pagador.",
+          lancamento: lancamentos[idx],
+        }, { status: 422 });
       }
     } else if (updates.gerar_boleto) {
       boletoUpdate = {
@@ -373,7 +394,7 @@ export async function PUT(req: NextRequest) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
-        const result = await sendWhatsApp(lancamento.telefone || lancamento.whatsapp, message.body, session);
+        const result = await sendWhatsApp(phoneOf(lancamento), message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || lancamento;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
@@ -384,7 +405,7 @@ export async function PUT(req: NextRequest) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
-        const result = await sendEmail(lancamento.email, message.subject, message.body, session);
+        const result = await sendEmail(emailOf(lancamento), message.subject, message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || lancamento;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };

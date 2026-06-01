@@ -306,6 +306,21 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
                 <label className="form-label">Cedente</label>
                 <input className="form-input" value={String(boleto.cedente || "")} onChange={(e) => bol("cedente", e.target.value)} placeholder="Nome do cedente" />
               </div>
+              <div className="form-group form-group-span2">
+                <label className="form-label">Mercado Pago Access Token</label>
+                <input className="form-input" type="password" value={String(boleto.mercado_pago_access_token || "")} onChange={(e) => bol("mercado_pago_access_token", e.target.value)} placeholder="APP_USR-..." />
+                <div className="form-help">Usado para gerar boleto real pelo Mercado Pago no Node.js. Variaveis de ambiente continuam tendo prioridade.</div>
+              </div>
+              <div className="form-group form-group-span2">
+                <label className="form-label">Mercado Pago assinatura secreta do webhook</label>
+                <input className="form-input" type="password" value={String(boleto.mercado_pago_webhook_secret || "")} onChange={(e) => bol("mercado_pago_webhook_secret", e.target.value)} placeholder="Assinatura secreta do Mercado Pago" />
+                <div className="form-help">Valida as notificacoes de pagamento antes de dar baixa automatica.</div>
+              </div>
+              <div className="form-group form-group-span2">
+                <label className="form-label">CPF/CNPJ padrão do pagador</label>
+                <input className="form-input" value={String(boleto.payer_document || "")} onChange={(e) => bol("payer_document", e.target.value)} placeholder="Usado apenas se o aluno/responsavel estiver sem CPF/CNPJ" />
+                <div className="form-help">O ideal é manter CPF/CNPJ no cadastro do aluno ou responsável. Este campo evita falha em boletos antigos incompletos.</div>
+              </div>
               <div className="form-group">
                 <label className="form-label">Banco</label>
                 <input className="form-input" value={String(boleto.banco || "")} onChange={(e) => bol("banco", e.target.value)} placeholder="237 - Bradesco" />
