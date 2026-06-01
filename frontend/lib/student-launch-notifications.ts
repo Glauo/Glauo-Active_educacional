@@ -24,7 +24,14 @@ function studentLogin(row: Row) {
 }
 
 function studentClass(row: Row) {
-  return text(row.turma || row.classe || row.class);
+  return text(row.turma || row.classe || row.class || row.turma_nome || row.nome_turma || row.turma_atual);
+}
+
+function studentClasses(row: Row) {
+  return [
+    studentClass(row),
+    ...normalizeList(row.turmas || row.classes || row.turmas_aluno),
+  ].map(normalize).filter(Boolean);
 }
 
 function studentPhone(row: Row) {
@@ -67,7 +74,7 @@ export function itemTargetsStudent(item: Row, student: Row) {
   const targetStudents = normalizeList(item.alunos || item.alunos_especificos || item.target_alunos);
   const targetClass = text(item.turma || item.target_turma || item.classe);
   const targetClasses = normalizeList(item.turmas || item.target_turmas || item.target_turmas_envio);
-  const className = normalize(studentClass(student));
+  const classNames = studentClasses(student);
 
   if (targetStudent) return listMatchesStudent([targetStudent], student);
   if (targetStudents.length > 0) return listMatchesStudent(targetStudents, student);
@@ -76,7 +83,7 @@ export function itemTargetsStudent(item: Row, student: Row) {
   if (classTargets.length > 0) {
     const matchesClass = classTargets.some((turma) => {
       const target = normalize(turma);
-      return ["todas", "todos", "escola toda", "todas as turmas"].includes(target) || target === className;
+      return ["todas", "todos", "escola toda", "todas as turmas"].includes(target) || classNames.includes(target);
     });
     if (!matchesClass) return false;
   }
@@ -85,7 +92,14 @@ export function itemTargetsStudent(item: Row, student: Row) {
 }
 
 export function targetStudents(students: Row[], item: Row) {
-  return students.filter((student) => isActiveStudent(student) && itemTargetsStudent(item, student));
+  const seen = new Set<string>();
+  return students.filter((student) => {
+    if (!isActiveStudent(student) || !itemTargetsStudent(item, student)) return false;
+    const key = normalize(text(student.id) || studentLogin(student) || studentName(student));
+    if (key && seen.has(key)) return false;
+    if (key) seen.add(key);
+    return true;
+  });
 }
 
 export async function notifyStudentsAboutLaunch({

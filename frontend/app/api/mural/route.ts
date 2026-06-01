@@ -10,6 +10,50 @@ function ownedBy(post: WallPost, actor: string) {
   return text(post.autor).toLowerCase() === actor.toLowerCase();
 }
 
+function isDraft(status: unknown) {
+  return text(status).toLowerCase().includes("rascunho");
+}
+
+function notificationDone(status: unknown) {
+  const data = status && typeof status === "object" ? status as Record<string, unknown> : {};
+  const whatsapp = text(data.whatsapp).toLowerCase();
+  const email = text(data.email).toLowerCase();
+  return whatsapp.includes("enviados:") || whatsapp.includes("sem_destinatarios") || email.includes("enviados:") || email.includes("sem_destinatarios");
+}
+
+function shouldNotifyOnUpdate(before: WallPost, after: WallPost, body: WallPost) {
+  if (isDraft(after.status)) return false;
+  if (text(body.enviar_notificacao).toLowerCase() === "true") return true;
+  if (isDraft(before.status) && !isDraft(after.status)) return true;
+  return !notificationDone(after.notification_status);
+}
+
+async function notifyMuralPost(post: WallPost, session: NonNullable<Awaited<ReturnType<typeof getSession>>>) {
+  const students = await dbList<Record<string, unknown>>("students.json");
+  try {
+    return {
+      ...(await notifyStudentsAboutLaunch({
+        students,
+        item: post,
+        kind: "comunicado",
+        title: `${text(post.tipo_post || "Comunicado")}: ${text(post.titulo)}`,
+        body: text(post.mensagem),
+        session,
+      })),
+      notificado_em: nowIso(),
+    };
+  } catch (err) {
+    console.error("[mural notificacao]", err);
+    return {
+      push: "erro",
+      whatsapp: `erro:${err instanceof Error ? err.message : "falha no envio"}`.slice(0, 180),
+      email: `erro:${err instanceof Error ? err.message : "falha no envio"}`.slice(0, 180),
+      total_destinatarios: 0,
+      notificado_em: nowIso(),
+    };
+  }
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
@@ -61,19 +105,9 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const [posts, students] = await Promise.all([
-    dbList<WallPost>(KEY),
-    dbList<Record<string, unknown>>("students.json"),
-  ]);
+  const posts = await dbList<WallPost>(KEY);
   if (!text(post.status).toLowerCase().includes("rascunho")) {
-    post.notification_status = await notifyStudentsAboutLaunch({
-      students,
-      item: post,
-      kind: "comunicado",
-      title: `${text(post.tipo_post)}: ${text(post.titulo)}`,
-      body: text(post.mensagem),
-      session,
-    });
+    post.notification_status = await notifyMuralPost(post, session);
   } else {
     post.notification_status = { push: "rascunho", whatsapp: "rascunho", email: "rascunho", total_destinatarios: 0 };
   }
@@ -98,14 +132,25 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Voce so pode editar posts proprios." }, { status: 403 });
   }
 
-  const next = {
+  const next: WallPost = {
     ...posts[idx],
     ...body,
     titulo: text(body.titulo || posts[idx].titulo).slice(0, 100),
     mensagem: text(body.mensagem || body.conteudo || posts[idx].mensagem),
+    turma: text(body.turma || posts[idx].turma || "Todas") || "Todas",
+    turmas: body.turmas === undefined ? normalizeList(posts[idx].turmas) : normalizeList(body.turmas),
+    aluno: body.aluno === undefined ? text(posts[idx].aluno) : text(body.aluno),
+    alunos: body.alunos === undefined ? normalizeList(posts[idx].alunos) : normalizeList(body.alunos),
+    tipo_post: text(body.tipo_post || posts[idx].tipo_post || "Aviso Geral"),
+    status: text(body.status || posts[idx].status || "Ativo"),
     fixado: canManageAllSchoolContent(session) ? Boolean(body.fixado) : Boolean(posts[idx].fixado),
     atualizado_em: nowIso(),
   };
+  if (shouldNotifyOnUpdate(posts[idx], next, body)) {
+    next.notification_status = await notifyMuralPost(next, session);
+  } else if (isDraft(next.status)) {
+    next.notification_status = { push: "rascunho", whatsapp: "rascunho", email: "rascunho", total_destinatarios: 0 };
+  }
   posts[idx] = next;
   await dbSet(KEY, posts);
   return NextResponse.json(next);
