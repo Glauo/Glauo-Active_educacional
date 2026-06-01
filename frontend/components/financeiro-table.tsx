@@ -192,6 +192,8 @@ function financePhone(lancamento: Lancamento) {
     lancamento.telefone ||
     lancamento.whatsapp ||
     lancamento.celular ||
+    lancamento.aluno_telefone ||
+    lancamento.phone ||
     lancamento.responsavel_telefone ||
     lancamento.telefone_responsavel ||
     lancamento.celular_responsavel ||
@@ -251,7 +253,9 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
       const sendData = await sendRes.json().catch(() => ({}));
       if (!sendRes.ok || !sendData.ok) {
         alert(`WhatsApp nao enviado automaticamente: ${String(sendData.status || sendData.error || "verifique a WAPI")}`);
+        return;
       }
+      alert("Boleto enviado por WhatsApp.");
     } catch {
       alert("Erro ao enviar boleto por WhatsApp.");
     } finally {
@@ -261,7 +265,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
 
   return (
     <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!phone || sending} title={!phone ? "Sem telefone cadastrado" : ""}>
-      {sending ? "Enviando..." : "WhatsApp"}
+      {sending ? "Enviando..." : phone ? "WhatsApp" : "Sem WhatsApp"}
     </button>
   );
 }

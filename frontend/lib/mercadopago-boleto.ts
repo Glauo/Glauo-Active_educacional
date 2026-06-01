@@ -11,6 +11,14 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
+function normalize(value: unknown) {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function asRow(value: unknown): Row {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
+}
+
 function moneyNumber(value: unknown) {
   const n = parseFloat(String(value || "0").replace(/[^\d.,-]/g, "").replace(",", "."));
   return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : 0;
@@ -45,6 +53,7 @@ function boletoToken(config: Row | null) {
 }
 
 function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null) {
+  const responsavel = asRow(aluno?.responsavel);
   return text(
     lancamento.email ||
     lancamento.aluno_email ||
@@ -53,6 +62,9 @@ function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null) {
     aluno?.responsavel_email ||
     aluno?.email_responsavel ||
     aluno?.emailResponsavel ||
+    responsavel.email ||
+    responsavel.email_responsavel ||
+    responsavel.emailResponsavel ||
     aluno?.aluno_email ||
     aluno?.email ||
     config?.payer_email ||
@@ -72,28 +84,35 @@ function splitAddress(value: unknown) {
 }
 
 function payerAddress(lancamento: Row, aluno: Row | null, sistema: Row | null) {
+  const responsavel = asRow(aluno?.responsavel);
   const parsedLancamento = splitAddress(lancamento.endereco || lancamento.address);
   const parsedAluno = splitAddress(aluno?.endereco || aluno?.address);
+  const parsedResponsavel = splitAddress(responsavel.endereco || responsavel.address);
   const parsedSistema = splitAddress(sistema?.endereco || sistema?.address);
   return {
-    zip_code: digits(firstPresent(lancamento.cep, lancamento.zip_code, aluno?.cep, aluno?.zip_code, sistema?.cep, sistema?.zip_code)),
-    street_name: firstPresent(lancamento.rua, lancamento.street_name, parsedLancamento.street_name, aluno?.rua, aluno?.street_name, parsedAluno.street_name, sistema?.rua, sistema?.street_name, parsedSistema.street_name, "Rua nao informada"),
-    street_number: firstPresent(lancamento.numero, lancamento.number, lancamento.street_number, parsedLancamento.street_number, aluno?.numero, aluno?.number, aluno?.street_number, parsedAluno.street_number, sistema?.numero, sistema?.street_number, parsedSistema.street_number, "S/N"),
-    neighborhood: firstPresent(lancamento.bairro, lancamento.neighborhood, parsedLancamento.neighborhood, aluno?.bairro, aluno?.neighborhood, parsedAluno.neighborhood, sistema?.bairro, sistema?.neighborhood, parsedSistema.neighborhood, "Centro"),
-    city: firstPresent(lancamento.cidade, lancamento.city, parsedLancamento.city, aluno?.cidade, aluno?.city, parsedAluno.city, sistema?.cidade, sistema?.city, "Sao Paulo"),
-    federal_unit: firstPresent(lancamento.estado, lancamento.uf, lancamento.federal_unit, aluno?.estado, aluno?.uf, aluno?.federal_unit, sistema?.estado, sistema?.uf, sistema?.federal_unit, "SP").slice(0, 2).toUpperCase(),
+    zip_code: digits(firstPresent(lancamento.cep, lancamento.zip_code, aluno?.cep, aluno?.zip_code, responsavel.cep, responsavel.zip_code, sistema?.cep, sistema?.zip_code)),
+    street_name: firstPresent(lancamento.rua, lancamento.street_name, parsedLancamento.street_name, aluno?.rua, aluno?.street_name, parsedAluno.street_name, responsavel.rua, responsavel.street_name, parsedResponsavel.street_name, sistema?.rua, sistema?.street_name, parsedSistema.street_name, "Rua nao informada"),
+    street_number: firstPresent(lancamento.numero, lancamento.number, lancamento.street_number, parsedLancamento.street_number, aluno?.numero, aluno?.number, aluno?.street_number, parsedAluno.street_number, responsavel.numero, responsavel.number, responsavel.street_number, parsedResponsavel.street_number, sistema?.numero, sistema?.street_number, parsedSistema.street_number, "S/N"),
+    neighborhood: firstPresent(lancamento.bairro, lancamento.neighborhood, parsedLancamento.neighborhood, aluno?.bairro, aluno?.neighborhood, parsedAluno.neighborhood, responsavel.bairro, responsavel.neighborhood, parsedResponsavel.neighborhood, sistema?.bairro, sistema?.neighborhood, parsedSistema.neighborhood, "Centro"),
+    city: firstPresent(lancamento.cidade, lancamento.city, parsedLancamento.city, aluno?.cidade, aluno?.city, parsedAluno.city, responsavel.cidade, responsavel.city, parsedResponsavel.city, sistema?.cidade, sistema?.city, "Sao Paulo"),
+    federal_unit: firstPresent(lancamento.estado, lancamento.uf, lancamento.federal_unit, aluno?.estado, aluno?.uf, aluno?.federal_unit, responsavel.estado, responsavel.uf, responsavel.federal_unit, sistema?.estado, sistema?.uf, sistema?.federal_unit, "SP").slice(0, 2).toUpperCase(),
   };
 }
 
 function findStudent(students: Row[], lancamento: Row) {
-  const id = text(lancamento.aluno_id);
-  const login = text(lancamento.aluno_login || lancamento.login);
-  const nome = text(lancamento.aluno || lancamento.nome);
-  return students.find((student) =>
-    (id && text(student.id || student._id || student.uuid || student.codigo) === id) ||
-    (login && text(student.login || student.usuario) === login) ||
-    (nome && text(student.nome || student.name) === nome)
-  ) || null;
+  const id = normalize(lancamento.aluno_id || lancamento.student_id || lancamento.id_aluno);
+  const login = normalize(lancamento.aluno_login || lancamento.login || lancamento.usuario);
+  const nome = normalize(lancamento.aluno || lancamento.nome || lancamento.pagador);
+  return students.find((student) => {
+    const ids = [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean);
+    const logins = [student.login, student.usuario, student.aluno_login].map(normalize).filter(Boolean);
+    const nomes = [student.nome, student.name, student.nome_completo, student.aluno].map(normalize).filter(Boolean);
+    return Boolean(
+      (id && ids.includes(id)) ||
+      (login && logins.includes(login)) ||
+      (nome && nomes.includes(nome))
+    );
+  }) || null;
 }
 
 export function expirationDate(value: unknown) {
@@ -136,6 +155,7 @@ export async function createMercadoPagoBoleto(
     dbList<Row>("students.json"),
   ]);
   const aluno = findStudent(students, lancamento);
+  const responsavel = asRow(aluno?.responsavel);
   const token = boletoToken(config);
   if (!token) {
     return {
@@ -165,7 +185,10 @@ export async function createMercadoPagoBoleto(
     lancamento.aluno_cpf ||
     lancamento.responsavel_cpf ||
     aluno?.cpf ||
+    aluno?.aluno_cpf ||
     aluno?.responsavel_cpf ||
+    responsavel.cpf ||
+    responsavel.cnpj ||
     aluno?.cnpj ||
     lancamento.cnpj ||
     config?.payer_document ||

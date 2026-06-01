@@ -96,7 +96,7 @@ export async function sendWhatsApp(number: unknown, message: string, session?: P
     { instance_id: instance, phone, text: body },
   ];
   const attempts: Record<string, unknown>[] = [];
-  const maxAttempts = 120;
+  const maxAttempts = 24;
 
   for (const url of endpointCandidates(baseUrl, instance)) {
     for (const authHeaders of headersList) {
@@ -107,7 +107,7 @@ export async function sendWhatsApp(number: unknown, message: string, session?: P
             method: "POST",
             headers: { Accept: "application/json", "Content-Type": "application/json", ...authHeaders },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(3500),
+            signal: AbortSignal.timeout(2500),
           });
           const preview = await res.text().catch(() => "");
           attempts.push({ url, status: res.status, auth: Object.keys(authHeaders)[0], payload: Object.keys(payload), preview: preview.slice(0, 160) });

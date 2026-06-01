@@ -47,6 +47,7 @@ function phoneOf(data: Record<string, unknown>) {
     data.telefone ||
     data.whatsapp ||
     data.celular ||
+    data.phone ||
     data.responsavel_telefone ||
     data.telefone_responsavel ||
     data.celular_responsavel ||
