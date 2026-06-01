@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ImportarBoletoPdfBtn, NovoLancamentoBtn } from "@/components/financeiro-modal";
 import { FinanceiroTable } from "@/components/financeiro-table";
 import { FinanceiroCommandCenter, FinanceiroExportButton } from "@/components/financeiro-command-center";
+import { SyncWhatsappBoletosButton } from "@/components/sync-whatsapp-boletos-button";
 import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
 import { ensureStudentsMonthlyBilling } from "@/lib/monthly-billing";
 
@@ -75,7 +76,7 @@ export default async function FinanceiroPage() {
     return !s.includes("pago") && !s.includes("baixado") && !s.includes("liquidado");
   });
 
-  // Alunos inadimplentes (alunos únicos com parcelas em atraso)
+  // Alunos inadimplentes (alunos unicos com parcelas em atraso)
   const alunosInadimplentes = new Set<string>();
   for (const r of recebimentos) {
     const s = String(r.status || r.situacao || "").toLowerCase();
@@ -89,7 +90,7 @@ export default async function FinanceiroPage() {
     }
   }
 
-  // Parcelas vencendo nos próximos 7 dias
+  // Parcelas vencendo nos proximos 7 dias
   const em7dias = new Date(hoje);
   em7dias.setDate(em7dias.getDate() + 7);
   let vencemEm7Dias = 0;
@@ -107,12 +108,13 @@ export default async function FinanceiroPage() {
     <AppShell breadcrumb="Financeiro" userName={session.pessoa || session.usuario} userRole={session.perfil}>
       <div className="page-header">
         <div className="page-title-block">
-          <div className="page-eyebrow"><span className="page-eyebrow-dot" />Módulo Administrativo</div>
+          <div className="page-eyebrow"><span className="page-eyebrow-dot" />Modulo Administrativo</div>
           <h1 className="page-title">Financeiro</h1>
-          <p className="page-description">Recebimentos, despesas, cobranças e baixas em um único painel.</p>
+          <p className="page-description">Recebimentos, despesas, cobrancas e baixas em um unico painel.</p>
         </div>
         <div className="page-actions">
           <ImportarBoletoPdfBtn alunos={alunos} />
+          {isAdminOrCoordinator(session) && <SyncWhatsappBoletosButton />}
           <FinanceiroExportButton recebimentos={recebimentos} despesas={despesas} />
           <NovoLancamentoBtn alunos={alunos} />
         </div>
@@ -127,7 +129,7 @@ export default async function FinanceiroPage() {
           </div>
           <div className="metric-label">A receber</div>
           <div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(totalAberto)}</div>
-          <div className="metric-note">{pendentes.length} lançamentos em aberto</div>
+          <div className="metric-note">{pendentes.length} lancamentos em aberto</div>
         </div>
         <div className="metric-card metric-card-green">
           <div className="metric-icon metric-icon-green">
@@ -143,7 +145,7 @@ export default async function FinanceiroPage() {
           </div>
           <div className="metric-label">Despesas abertas</div>
           <div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(totalDespesas)}</div>
-          <div className="metric-note">{despesas.length} lançamentos</div>
+          <div className="metric-note">{despesas.length} lancamentos</div>
         </div>
         <div className="metric-card metric-card-blue">
           <div className="metric-icon metric-icon-blue">
@@ -151,7 +153,7 @@ export default async function FinanceiroPage() {
           </div>
           <div className="metric-label">Vencem hoje</div>
           <div className="metric-value">{vencemHoje}</div>
-          <div className="metric-note">Requerem ação imediata</div>
+          <div className="metric-note">Requerem acao imediata</div>
         </div>
         <div className="metric-card metric-card-red">
           <div className="metric-icon metric-icon-red">
@@ -167,7 +169,7 @@ export default async function FinanceiroPage() {
           </div>
           <div className="metric-label">Vencem em 7 dias</div>
           <div className="metric-value">{vencemEm7Dias}</div>
-          <div className="metric-note">Parcelas próximas do vencimento</div>
+          <div className="metric-note">Parcelas proximas do vencimento</div>
         </div>
       </div>
 
