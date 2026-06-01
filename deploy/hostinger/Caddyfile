@@ -4,14 +4,14 @@
 
 {$DOMAIN} {
   handle_path /wapi/webhook* {
-    reverse_proxy wizbot:8787
+    reverse_proxy ativo-educacional_github_wizbot:8787
   }
 
   handle_path /health/wiz* {
-    reverse_proxy wizbot:8787
+    reverse_proxy ativo-educacional_github_wizbot:8787
   }
 
   # Next.js app
-  reverse_proxy app:3000
+  reverse_proxy ativo-educacional_github_app:3000
   encode gzip
 }
