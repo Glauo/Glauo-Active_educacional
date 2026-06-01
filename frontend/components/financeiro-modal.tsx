@@ -355,7 +355,7 @@ function LancamentoModal({
 
     setSaving(true);
     const erros: string[] = [];
-    const links: { whatsapp: string; email: string; label: string }[] = [];
+    const links: { whatsapp?: { phone: string; message: string }; email: string; label: string }[] = [];
 
     try {
       let boletoPdfData: Record<string, string> = {};
