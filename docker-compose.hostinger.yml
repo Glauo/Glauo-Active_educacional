@@ -1,8 +1,13 @@
 services:
-
-  # Next.js app (interface publica Node.js)
-  # O Easypanel mantem um override para o servico "app"; por isso o nome fica app.
+  # Compatibilidade com overrides antigos do EasyPanel que referenciavam "app".
+  # Fica fora do deploy normal para nao publicar o alias generico "app" na rede compartilhada.
   app:
+    image: alpine:3.20
+    command: ["sh", "-c", "sleep infinity"]
+    profiles:
+      - easypanel-compat
+
+  ativo_educacional_app:
     build:
       context: .
       dockerfile: Dockerfile.frontend
@@ -79,7 +84,8 @@ services:
       WAPI_TOKEN: ${WAPI_TOKEN:-}
       WAPI_INSTANCE_ID: ${WAPI_INSTANCE_ID:-}
       WIZBOT_PAUSED: "1"
-      FRONTEND_INTERNAL_URL: "http://app:3000"
+      CRON_SECRET: ${CRON_SECRET:-ae-cron-boletos-2026}
+      FRONTEND_INTERNAL_URL: "http://ativo_educacional_app:3000"
     expose:
       - "8787"
     networks:

@@ -960,6 +960,71 @@ class WizWebhookHandler(BaseHTTPRequestHandler):
         return
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Agendador de cron: regera boletos sem URL do Mercado Pago todo dia 5 do mes
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _get_frontend_base_url():
+    """Retorna a URL base do frontend Next.js para chamadas internas."""
+    url = str(os.getenv("FRONTEND_INTERNAL_URL", "")).strip()
+    if url:
+        return url.rstrip("/")
+    # Nome do servico na rede interna do Docker Compose
+    return "http://ativo_educacional_app:3000"
+
+
+def _cron_regerar_boletos():
+    """Chama a rota /api/financeiro/cron-boletos no frontend Next.js."""
+    cron_secret = str(os.getenv("CRON_SECRET", "")).strip()
+    if not cron_secret:
+        print("[cron-boletos] CRON_SECRET nao configurado, pulando execucao.", flush=True)
+        return
+    base_url = _get_frontend_base_url()
+    url = f"{base_url}/api/financeiro/cron-boletos?secret={cron_secret}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            try:
+                data = json.loads(body)
+                regerados = data.get("regerados", 0)
+                erros = data.get("erros", 0)
+                print(
+                    f"[cron-boletos] Concluido: {regerados} boleto(s) regerado(s), {erros} erro(s).",
+                    flush=True,
+                )
+            except Exception:
+                print(f"[cron-boletos] Resposta: {body[:300]}", flush=True)
+    except Exception as exc:
+        print(f"[cron-boletos] Erro ao chamar rota de cron: {exc}", flush=True)
+
+
+def _scheduler_loop():
+    """
+    Loop de agendamento em thread separada.
+    Executa a regeracao de boletos todo dia 5 do mes as 06:00 (horario do servidor).
+    """
+    ultimo_dia_executado = None
+    # Aguarda 60s na inicializacao para o frontend subir
+    time.sleep(60)
+    while True:
+        try:
+            agora = datetime.datetime.now()
+            # Executa todo dia 5 do mes as 06:00
+            if agora.day == 5 and agora.hour == 6 and ultimo_dia_executado != agora.date():
+                print(
+                    f"[cron-boletos] Disparando cron mensal: {agora.strftime('%Y-%m-%d %H:%M:%S')}",
+                    flush=True,
+                )
+                ultimo_dia_executado = agora.date()
+                _cron_regerar_boletos()
+        except Exception as exc:
+            print(f"[cron-boletos] Erro no loop do agendador: {exc}", flush=True)
+        # Verifica a cada 30 minutos
+        time.sleep(1800)
+
+
 def main():
     host = str(os.getenv("WIZ_WEBHOOK_HOST", "0.0.0.0")).strip() or "0.0.0.0"
     port = int(str(os.getenv("WIZ_WEBHOOK_PORT", "8787")).strip() or "8787")
