@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbList } from "@/lib/db";
+import { dbList, dbSet } from "@/lib/db";
+import { criarBoleteMercadoPago } from "@/lib/mercadopago";
 
 type Row = Record<string, unknown>;
 
@@ -8,9 +9,105 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
-function money(value: unknown) {
-  const n = parseFloat(String(value || "0").replace(/[^\d.,-]/g, "").replace(",", "."));
-  return (Number.isFinite(n) ? n : 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function normalize(value: unknown) {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function asRow(value: unknown): Row {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
+}
+
+function firstPresent(...values: unknown[]) {
+  return values.map(text).find(Boolean) || "";
+}
+
+function moneyNumber(value: unknown) {
+  return Number.parseFloat(text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+function expirationFrom(value: unknown) {
+  const raw = text(value);
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const iso = br ? `${br[3]}-${br[2]}-${br[1]}` : raw;
+  return iso ? `${iso}T23:59:59.000-03:00` : undefined;
+}
+
+function findStudent(students: Row[], lancamento: Row) {
+  const id = normalize(lancamento.aluno_id || lancamento.student_id || lancamento.id_aluno);
+  const login = normalize(lancamento.aluno_login || lancamento.login || lancamento.usuario);
+  const name = normalize(lancamento.aluno || lancamento.nome || lancamento.pagador);
+  return students.find((student) => {
+    const ids = [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean);
+    const logins = [student.login, student.usuario, student.aluno_login].map(normalize).filter(Boolean);
+    const names = [student.nome, student.name, student.nome_completo, student.aluno].map(normalize).filter(Boolean);
+    return Boolean(
+      (id && ids.includes(id)) ||
+      (login && logins.includes(login)) ||
+      (name && names.includes(name))
+    );
+  }) || null;
+}
+
+function errorHtml(title: string, message: string, detail?: string) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
+    body{font-family:Arial,sans-serif;background:#f8fafc;color:#172033;margin:0;padding:40px}.box{max-width:760px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 18px 45px rgba(15,23,42,.08)}
+    h1{font-size:22px;margin:0 0 10px}.muted{color:#64748b;line-height:1.55}.detail{margin-top:16px;padding:12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+  </style></head><body><div class="box"><h1>${title}</h1><p class="muted">${message}</p>${detail ? `<div class="detail">${detail}</div>` : ""}</div></body></html>`;
+  return new NextResponse(html, { status: 422, headers: { "content-type": "text/html; charset=utf-8" } });
+}
+
+function importedPdfUrl(lancamento: Row, origin: string) {
+  const pdfUrl = text(lancamento.boleto_pdf_url);
+  if (!pdfUrl || pdfUrl.startsWith("http")) return "";
+  if (pdfUrl.includes("boleto-pdf")) return pdfUrl.startsWith("/") ? `${origin}${pdfUrl}` : `${origin}/${pdfUrl}`;
+  return "";
+}
+
+function mercadoPagoPayload(lancamento: Row, id: string, students: Row[], origin: string) {
+  const student = findStudent(students, lancamento);
+  const responsavel = asRow(student?.responsavel);
+  const nomeAluno = firstPresent(lancamento.aluno, lancamento.nome, lancamento.pagador, student?.nome, student?.name, "Aluno Active");
+  const nameParts = nomeAluno.split(/\s+/).filter(Boolean);
+  return {
+    transaction_amount: moneyNumber(lancamento.valor_parcela ?? lancamento.valor),
+    description: text(lancamento.descricao) || `Mensalidade - ${nomeAluno}`,
+    payer_email: firstPresent(
+      lancamento.email,
+      lancamento.aluno_email,
+      lancamento.responsavel_email,
+      lancamento.email_responsavel,
+      student?.responsavel_email,
+      student?.email_responsavel,
+      responsavel.email,
+      student?.aluno_email,
+      student?.email
+    ) || `aluno.${normalize(nomeAluno).replace(/\s+/g, ".") || id.slice(0, 8)}@activeeducacional.com.br`,
+    payer_first_name: nameParts[0] || "Responsavel",
+    payer_last_name: nameParts.slice(1).join(" ") || "Financeiro",
+    payer_cpf: firstPresent(
+      lancamento.cpf,
+      lancamento.aluno_cpf,
+      lancamento.responsavel_cpf,
+      student?.cpf,
+      student?.aluno_cpf,
+      student?.responsavel_cpf,
+      responsavel.cpf,
+      responsavel.cnpj,
+      student?.cnpj,
+      lancamento.cnpj
+    ),
+    payer_address: {
+      zip_code: firstPresent(lancamento.cep, lancamento.zip_code, student?.cep, student?.zip_code, responsavel.cep, responsavel.zip_code),
+      street_name: firstPresent(lancamento.rua, lancamento.endereco, lancamento.street_name, student?.rua, student?.endereco, student?.street_name, responsavel.rua, responsavel.endereco, responsavel.street_name),
+      street_number: firstPresent(lancamento.numero, lancamento.number, lancamento.street_number, student?.numero, student?.number, student?.street_number, responsavel.numero, responsavel.number, responsavel.street_number),
+      neighborhood: firstPresent(lancamento.bairro, lancamento.neighborhood, student?.bairro, student?.neighborhood, responsavel.bairro, responsavel.neighborhood),
+      city: firstPresent(lancamento.cidade, lancamento.city, student?.cidade, student?.city, responsavel.cidade, responsavel.city),
+      federal_unit: firstPresent(lancamento.estado, lancamento.uf, lancamento.federal_unit, student?.estado, student?.uf, student?.federal_unit, responsavel.estado, responsavel.uf, responsavel.federal_unit),
+    },
+    date_of_expiration: expirationFrom(lancamento.vencimento || lancamento.data_vencimento),
+    external_reference: id,
+    notification_url: text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || process.env.MERCADO_PAGO_WEBHOOK_URL) || `${origin}/api/financeiro/mercado-pago/webhook`,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -28,74 +125,45 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 403 });
   }
 
-  // Prioridade 1: redirecionar para boleto real do Mercado Pago
-  const boletoUrl = text(lancamento.boleto_url);
-  if (boletoUrl && boletoUrl.startsWith("http")) {
-    return NextResponse.redirect(boletoUrl);
-  }
+  const origin = new URL(req.url).origin;
+  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
+  if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
 
-  // Prioridade 2: redirecionar para URL de pagamento Pix
   const pixUrl = text(lancamento.pix_url);
-  if (pixUrl && pixUrl.startsWith("http")) {
-    return NextResponse.redirect(pixUrl);
+  if (pixUrl.startsWith("http")) return NextResponse.redirect(pixUrl);
+
+  const externalPdf = text(lancamento.boleto_pdf_url || lancamento.boleto_pdf_public_url);
+  if (externalPdf.startsWith("http")) return NextResponse.redirect(externalPdf);
+
+  const importedPdf = importedPdfUrl(lancamento, origin);
+  if (importedPdf) return NextResponse.redirect(importedPdf);
+
+  const students = await dbList<Row>("students.json");
+  const generated = await criarBoleteMercadoPago(mercadoPagoPayload(lancamento, id, students, origin));
+  if (!generated.ok) {
+    return errorHtml(
+      "Falha ao gerar boleto Mercado Pago",
+      generated.error || "Nao foi possivel gerar o boleto real no Mercado Pago.",
+      "Verifique o Access Token, CPF/CNPJ, e-mail, endereco do pagador e valor do lancamento."
+    );
   }
 
-  // Prioridade 3: PDF importado
-  const pdfUrl = text(lancamento.boleto_pdf_url || lancamento.boleto_pdf_public_url);
-  if (pdfUrl && pdfUrl.startsWith("/api/")) {
-    return NextResponse.redirect(new URL(pdfUrl, req.url));
-  }
+  await dbSet("receivables.json", recebimentos.map((item) => text(item.id) === id ? {
+    ...item,
+    mercado_pago_ticket_url: generated.boleto_url,
+    boleto_url: generated.boleto_url,
+    boleto_codigo: generated.barcode || text(item.boleto_codigo),
+    boleto_linha_digitavel: generated.digitable_line || generated.barcode || "",
+    boleto_status: "Mercado Pago",
+    mp_payment_id: generated.payment_id,
+    mp_status: generated.status,
+    mp_status_detail: generated.status_detail,
+    mp_date_of_expiration: generated.date_of_expiration,
+    boleto_gerado_em: new Date().toISOString(),
+    boleto_erro: "",
+  } : item));
 
-  // Prioridade 4: exibir pagina com linha digitavel e Pix copia-e-cola
-  const codigo = text(lancamento.boleto_codigo) || `AE-${id.slice(0, 8).toUpperCase()}`;
-  const linhaDigitavel = text(lancamento.boleto_linha_digitavel);
-  const pixQrCode = text(lancamento.pix_qr_code);
-  const pixQrImageB64 = text(lancamento.pix_qr_image_b64);
-  const boletoStatus = text(lancamento.boleto_status);
-  const mpPaymentId = text(lancamento.mp_payment_id);
-  const mpStatus = text(lancamento.mp_status);
-  const mpErro = text(lancamento.boleto_erro);
-
-  const linhaSection = linhaDigitavel
-    ? `<div class="bar">${linhaDigitavel}</div><p style="text-align:center;font-size:12px;color:#64748b">Linha digitavel - copie e pague em qualquer banco</p>`
-    : `<div class="bar">${codigo.replace(/-/g, " ")} ${String(lancamento.valor || "0").replace(/\D/g, "").padStart(8, "0")}</div>`;
-
-  const pixSection = pixQrCode
-    ? `<div style="margin-top:24px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0"><div class="muted" style="margin-bottom:8px">Pix copia e cola</div><textarea readonly onclick="this.select()" style="width:100%;font-size:12px;padding:8px;border:1px solid #ccc;border-radius:4px;resize:none;height:64px">${pixQrCode}</textarea>${pixQrImageB64 ? `<div style="text-align:center;margin-top:12px"><img src="data:image/png;base64,${pixQrImageB64}" style="max-width:200px" alt="QR Code Pix"/></div>` : ""}</div>`
-    : "";
-
-  let avisoHtml = "";
-  if (boletoStatus === "Erro MP" && mpErro) {
-    avisoHtml = `<div style="margin-top:16px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;font-size:13px">Erro ao gerar boleto no Mercado Pago: <strong>${mpErro}</strong><br>Entre em contato com a secretaria.</div>`;
-  } else if (!boletoUrl && !linhaDigitavel && !pixQrCode) {
-    avisoHtml = `<div style="margin-top:16px;padding:12px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;font-size:13px">O boleto bancario ainda nao foi gerado. Entre em contato para solicitar a segunda via.</div>`;
-  }
-
-  const mpInfoHtml = mpPaymentId
-    ? `<div style="margin-top:12px;padding:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af"><strong>Mercado Pago</strong> - Payment ID: ${mpPaymentId} | Status: ${mpStatus || "pending"}</div>`
-    : "";
-
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Boleto ${codigo}</title><style>
-    body{font-family:Arial,sans-serif;margin:40px;color:#172033} .box{border:2px solid #172033;padding:24px;border-radius:10px;max-width:760px;margin:auto}
-    h1{margin:0 0 8px;font-size:24px}.muted{color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}.value{font-weight:700;font-size:18px}
-    .bar{font-family:monospace;font-size:16px;letter-spacing:2px;border:1px dashed #64748b;padding:18px;text-align:center;margin-top:24px;word-break:break-all}
-    @media print{button{display:none}}
-  </style></head><body><div class="box">
-    <div class="muted">Ativo Educacional - Boleto / Fatura</div><h1>${text(lancamento.descricao) || "Mensalidade escolar"}</h1>
-    <div class="grid">
-      <div><div class="muted">Aluno</div><div class="value">${text(lancamento.aluno || lancamento.nome)}</div></div>
-      <div><div class="muted">Vencimento</div><div class="value">${text(lancamento.vencimento || lancamento.data_vencimento)}</div></div>
-      <div><div class="muted">Valor</div><div class="value">${money(lancamento.valor_parcela || lancamento.valor)}</div></div>
-      <div><div class="muted">Status</div><div class="value">${text(lancamento.boleto_status || lancamento.status) || "Em aberto"}</div></div>
-    </div>
-    ${linhaSection}
-    ${pixSection}
-    ${mpInfoHtml}
-    ${avisoHtml}
-    <p style="margin-top:20px;font-size:12px;color:#64748b">Documento gerado pelo sistema Ativo Educacional. Use a opcao imprimir do navegador para salvar em PDF.</p>
-    <button onclick="window.print()">Gerar PDF</button>
-  </div></body></html>`;
-
-  return new NextResponse(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  return generated.boleto_url
+    ? NextResponse.redirect(generated.boleto_url)
+    : errorHtml("Boleto gerado sem URL", "O Mercado Pago criou o pagamento, mas nao retornou link do boleto.");
 }
