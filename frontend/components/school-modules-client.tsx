@@ -42,6 +42,42 @@ function closeIcon() {
   return <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>;
 }
 
+const MURAL_TYPES = ["Aviso Geral", "Comunicado Importante", "Evento", "Informacao Pedagogica", "Conquista / Reconhecimento", "Urgente"];
+
+function muralWizTemplate(tipo: string) {
+  const templates: Record<string, { titulo: string; mensagem: string }> = {
+    "Aviso Geral": {
+      titulo: "Comunicado geral",
+      mensagem: "Ola, familias e alunos!\n\nCompartilhamos este comunicado para manter todos informados sobre a rotina da escola.\n\nPedimos que leiam com atencao e, em caso de duvida, entrem em contato com a secretaria.\n\nAtenciosamente,\nEquipe Active Educacional",
+    },
+    "Comunicado Importante": {
+      titulo: "Comunicado importante",
+      mensagem: "Ola, familias e alunos!\n\nTemos uma informacao importante para compartilhar. Pedimos que leiam este comunicado com atencao e acompanhem as orientacoes descritas.\n\nA colaboracao de todos ajuda a manter nossa rotina organizada e segura.\n\nAtenciosamente,\nEquipe Active Educacional",
+    },
+    Evento: {
+      titulo: "Convite para evento",
+      mensagem: "Ola, familias e alunos!\n\nPreparamos um evento especial e contamos com a participacao de todos.\n\nEm breve compartilharemos os detalhes de horario, local e orientacoes. Sua presenca sera muito bem-vinda.\n\nAtenciosamente,\nEquipe Active Educacional",
+    },
+    "Informacao Pedagogica": {
+      titulo: "Informacao pedagogica",
+      mensagem: "Ola, familias e alunos!\n\nCompartilhamos uma orientacao pedagogica importante para apoiar o desenvolvimento dos estudantes.\n\nAcompanhar as atividades, revisoes e feedbacks faz parte do processo de evolucao e fortalece os resultados.\n\nAtenciosamente,\nEquipe pedagogica",
+    },
+    "Conquista / Reconhecimento": {
+      titulo: "Reconhecimento especial",
+      mensagem: "Ola, familias e alunos!\n\nTemos uma conquista especial para celebrar. Reconhecemos o esforco, a participacao e a evolucao dos nossos estudantes.\n\nParabens a todos os envolvidos. Seguimos juntos construindo grandes resultados.\n\nAtenciosamente,\nEquipe Active Educacional",
+    },
+    Urgente: {
+      titulo: "Comunicado urgente",
+      mensagem: "Ola, familias e alunos!\n\nEste comunicado exige atencao imediata.\n\nPedimos que leiam as orientacoes abaixo e acompanhem as atualizacoes pelo portal. Em caso de duvida, falem com a secretaria.\n\nAtenciosamente,\nEquipe Active Educacional",
+    },
+  };
+  return templates[tipo] || templates["Aviso Geral"];
+}
+
+function toStringList(value: unknown) {
+  return Array.isArray(value) ? value.map(text).filter(Boolean) : splitLines(text(value));
+}
+
 export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; turmas?: Row[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -53,7 +89,7 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
     tipo_post: "Aviso Geral",
     mensagem: "",
     turma: "Todas",
-    turmas: "",
+    turmas: [] as string[],
     aluno: "",
     publicar_em: "",
     expira_em: "",
@@ -64,8 +100,20 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
     enquete: "",
   });
 
-  function update(field: keyof typeof form, value: string | boolean) {
+  function update(field: keyof typeof form, value: string | boolean | string[]) {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setErro("");
+  }
+
+  function aplicarWiz() {
+    const template = muralWizTemplate(form.tipo_post);
+    setForm((prev) => ({
+      ...prev,
+      titulo: prev.titulo.trim() ? prev.titulo : template.titulo,
+      mensagem: template.mensagem,
+      requer_confirmacao: prev.tipo_post === "Urgente" ? true : prev.requer_confirmacao,
+      fixado: canPin && prev.tipo_post === "Urgente" ? true : prev.fixado,
+    }));
     setErro("");
   }
 
@@ -80,7 +128,7 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
-        turmas: splitLines(form.turmas),
+        turmas: form.turmas,
         anexos: splitLines(form.anexos),
         enquete_opcoes: splitLines(form.enquete).slice(0, 4),
       }),
@@ -114,7 +162,7 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
             <div className="modal-body">
               <div className="form-grid">
                 <div className="form-group form-group-span2"><label className="form-label">Titulo *</label><input className="form-input" maxLength={100} value={form.titulo} onChange={(e) => update("titulo", e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Tipo</label><select className="form-input" value={form.tipo_post} onChange={(e) => update("tipo_post", e.target.value)}><option>Comunicado Importante</option><option>Evento</option><option>Informacao Pedagogica</option><option>Conquista / Reconhecimento</option><option>Urgente</option><option>Aviso Geral</option></select></div>
+                <div className="form-group"><label className="form-label">Tipo</label><select className="form-input" value={form.tipo_post} onChange={(e) => update("tipo_post", e.target.value)}>{MURAL_TYPES.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></div>
                 <div className="form-group">
                   <label className="form-label">Turma principal</label>
                   <select className="form-input" value={form.turma} onChange={(e) => update("turma", e.target.value)}>
@@ -122,14 +170,18 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
                     {turmaOptions.map((turma) => <option key={turma} value={turma}>{turma}</option>)}
                   </select>
                 </div>
+                <div className="form-group form-group-span2" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={aplicarWiz}>Wiz mensagem pronta</button>
+                  <div className="form-help">Gera um texto base conforme o tipo escolhido. Voce pode revisar antes de publicar.</div>
+                </div>
                 <div className="form-group form-group-span2"><label className="form-label">Conteudo *</label><textarea className="form-input form-textarea" rows={5} value={form.mensagem} onChange={(e) => update("mensagem", e.target.value)} placeholder="Escreva o comunicado com clareza..." /></div>
                 <div className="form-group">
                   <label className="form-label">Turmas adicionais</label>
                   <select
                     className="form-input form-textarea"
                     multiple
-                    value={splitLines(form.turmas)}
-                    onChange={(e) => update("turmas", Array.from(e.target.selectedOptions).map((option) => option.value).join("\n"))}
+                    value={form.turmas}
+                    onChange={(e) => update("turmas", Array.from(e.target.selectedOptions).map((option) => option.value))}
                     style={{ minHeight: 92 }}
                   >
                     {turmaOptions.map((turma) => <option key={turma} value={turma}>{turma}</option>)}
@@ -156,6 +208,153 @@ export function MuralCreateButton({ canPin, turmas = [] }: { canPin: boolean; tu
             </div>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+export function MuralPostActions({ post, canPin, turmas = [] }: { post: WallPost; canPin: boolean; turmas?: Row[] }) {
+  const router = useRouter();
+  const turmaOptions = useMemo(() => uniqueClassNames(turmas), [turmas]);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState("");
+  const [form, setForm] = useState({
+    titulo: text(post.titulo),
+    tipo_post: text(post.tipo_post || "Aviso Geral"),
+    mensagem: text(post.mensagem),
+    turma: text(post.turma || "Todas") || "Todas",
+    turmas: toStringList(post.turmas),
+    aluno: text(post.aluno),
+    publicar_em: text(post.publicar_em),
+    expira_em: text(post.expira_em),
+    anexos: toStringList(post.anexos).join("\n"),
+    capa_url: text(post.capa_url),
+    fixado: Boolean(post.fixado),
+    requer_confirmacao: Boolean(post.requer_confirmacao),
+    enquete: toStringList(post.enquete_opcoes).join("\n"),
+  });
+
+  function update(field: keyof typeof form, value: string | boolean | string[]) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setErro("");
+  }
+
+  function aplicarWiz() {
+    const template = muralWizTemplate(form.tipo_post);
+    setForm((prev) => ({
+      ...prev,
+      titulo: prev.titulo.trim() ? prev.titulo : template.titulo,
+      mensagem: template.mensagem,
+      requer_confirmacao: prev.tipo_post === "Urgente" ? true : prev.requer_confirmacao,
+      fixado: canPin && prev.tipo_post === "Urgente" ? true : prev.fixado,
+    }));
+    setErro("");
+  }
+
+  async function salvar() {
+    if (!text(form.titulo) || !text(form.mensagem)) {
+      setErro("Titulo e conteudo sao obrigatorios.");
+      return;
+    }
+    setSaving(true);
+    const res = await fetch("/api/mural", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...form,
+        id: post.id,
+        turmas: form.turmas,
+        anexos: splitLines(form.anexos),
+        enquete_opcoes: splitLines(form.enquete).slice(0, 4),
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErro(text((data as { error?: string }).error) || "Erro ao editar comunicado.");
+      return;
+    }
+    setOpen(false);
+    refreshKeepingScroll(() => router.refresh());
+  }
+
+  async function excluir() {
+    if (!confirm(`Excluir o comunicado "${text(post.titulo || "sem titulo")}"?`)) return;
+    setSaving(true);
+    const res = await fetch(`/api/mural?id=${encodeURIComponent(text(post.id))}`, { method: "DELETE" });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErro(text((data as { error?: string }).error) || "Erro ao excluir comunicado.");
+      return;
+    }
+    refreshKeepingScroll(() => router.refresh());
+  }
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(true)} disabled={saving}>Editar</button>
+        <button type="button" className="btn btn-danger btn-sm" onClick={excluir} disabled={saving}>Excluir</button>
+      </div>
+      {erro && !open && <div className="form-error" style={{ marginTop: 8 }}>{erro}</div>}
+      {open && (
+        <ModalPortal>
+          <div className="modal-overlay" onClick={(event) => event.currentTarget === event.target && setOpen(false)}>
+            <div className="modal-box">
+              <div className="modal-header">
+                <div>
+                  <div className="modal-title">Editar comunicado</div>
+                  <div className="modal-subtitle">Ajuste o conteudo, destino e regras do mural</div>
+                </div>
+                <button type="button" className="modal-close" onClick={() => setOpen(false)}>{closeIcon()}</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="form-group form-group-span2"><label className="form-label">Titulo *</label><input className="form-input" maxLength={100} value={form.titulo} onChange={(e) => update("titulo", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Tipo</label><select className="form-input" value={form.tipo_post} onChange={(e) => update("tipo_post", e.target.value)}>{MURAL_TYPES.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</select></div>
+                  <div className="form-group">
+                    <label className="form-label">Turma principal</label>
+                    <select className="form-input" value={form.turma} onChange={(e) => update("turma", e.target.value)}>
+                      <option value="Todas">Todas as turmas</option>
+                      {turmaOptions.map((turma) => <option key={turma} value={turma}>{turma}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group form-group-span2" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={aplicarWiz}>Wiz mensagem pronta</button>
+                    <div className="form-help">Substitui o texto por um modelo pronto do tipo selecionado.</div>
+                  </div>
+                  <div className="form-group form-group-span2"><label className="form-label">Conteudo *</label><textarea className="form-input form-textarea" rows={5} value={form.mensagem} onChange={(e) => update("mensagem", e.target.value)} /></div>
+                  <div className="form-group">
+                    <label className="form-label">Turmas adicionais</label>
+                    <select className="form-input form-textarea" multiple value={form.turmas} onChange={(e) => update("turmas", Array.from(e.target.selectedOptions).map((option) => option.value))} style={{ minHeight: 92 }}>
+                      {turmaOptions.map((turma) => <option key={turma} value={turma}>{turma}</option>)}
+                    </select>
+                    <div className="form-help">Use Ctrl para selecionar mais de uma turma.</div>
+                  </div>
+                  <div className="form-group"><label className="form-label">Aluno especifico</label><input className="form-input" value={form.aluno} onChange={(e) => update("aluno", e.target.value)} placeholder="Opcional" /></div>
+                  <div className="form-group"><label className="form-label">Publicar em</label><input className="form-input" type="datetime-local" value={form.publicar_em} onChange={(e) => update("publicar_em", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Expira em</label><input className="form-input" type="datetime-local" value={form.expira_em} onChange={(e) => update("expira_em", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Anexos / links</label><textarea className="form-input form-textarea" rows={3} value={form.anexos} onChange={(e) => update("anexos", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Imagem de capa</label><input className="form-input" value={form.capa_url} onChange={(e) => update("capa_url", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Enquete</label><textarea className="form-input form-textarea" rows={3} value={form.enquete} onChange={(e) => update("enquete", e.target.value)} placeholder="Ate 4 opcoes, uma por linha" /></div>
+                  <div className="form-group">
+                    <label className="form-label">Regras</label>
+                    <label className="attendance-item"><input type="checkbox" checked={form.requer_confirmacao} onChange={(e) => update("requer_confirmacao", e.target.checked)} /> Confirmacao de leitura</label>
+                    {canPin && <label className="attendance-item" style={{ marginTop: 8 }}><input type="checkbox" checked={form.fixado} onChange={(e) => update("fixado", e.target.checked)} /> Fixar no topo</label>}
+                  </div>
+                </div>
+                {erro && <div className="form-error">{erro}</div>}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-danger btn-sm" disabled={saving} onClick={excluir} style={{ marginRight: "auto" }}>Excluir comunicado</button>
+                <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => setOpen(false)}>Cancelar</button>
+                <button type="button" className="btn btn-primary" disabled={saving} onClick={salvar}>{saving ? "Salvando..." : "Salvar alteracoes"}</button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
     </>
   );
