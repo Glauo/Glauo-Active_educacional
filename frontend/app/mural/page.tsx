@@ -1,7 +1,8 @@
 import { AppShell } from "@/components/app-shell";
-import { MuralCreateButton } from "@/components/school-modules-client";
+import { MuralCreateButton, MuralPostActions } from "@/components/school-modules-client";
 import { getSession } from "@/lib/auth";
 import { dbList } from "@/lib/db";
+import { getSchoolClasses } from "@/lib/school-data";
 import { canManageAllSchoolContent, canManageSchoolContent, tagBadge, text, type WallPost } from "@/lib/school-modules";
 import { redirect } from "next/navigation";
 
@@ -16,6 +17,7 @@ export default async function MuralPage() {
   const session = await getSession();
   if (!session) redirect("/login");
   const posts = await dbList<WallPost>("messages.json");
+  const turmas = await getSchoolClasses();
   const active = posts.filter((post) => !text(post.status).toLowerCase().includes("expir"));
   const needRead = posts.reduce((sum, post) => sum + (post.requer_confirmacao ? 1 : 0), 0);
   const confirmations = posts.reduce((sum, post) => sum + (Array.isArray(post.confirmacoes) ? post.confirmacoes.length : 0), 0);
@@ -29,7 +31,7 @@ export default async function MuralPage() {
           <h1 className="page-title">Mural de noticias e comunicados</h1>
           <p className="page-description">Canal oficial para comunicados, eventos, enquetes e confirmacoes de leitura no portal do aluno.</p>
         </div>
-        <div className="page-actions">{canCreate && <MuralCreateButton canPin={canManageAllSchoolContent(session)} />}</div>
+        <div className="page-actions">{canCreate && <MuralCreateButton canPin={canManageAllSchoolContent(session)} turmas={turmas} />}</div>
       </div>
 
       <div className="metric-grid metric-grid-4">
@@ -55,6 +57,7 @@ export default async function MuralPage() {
               const tipo = text(post.tipo_post || post.tipo || "Aviso Geral");
               const confirmacoes = Array.isArray(post.confirmacoes) ? post.confirmacoes.length : 0;
               const votos = Array.isArray(post.votos) ? post.votos.length : 0;
+              const turmaDestino = [text(post.turma || "Todas"), ...(Array.isArray(post.turmas) ? post.turmas.map(text) : [])].filter(Boolean).join(", ");
               return (
                 <article className="entity-card" key={text(post.id || post.titulo)} style={{ cursor: "default" }}>
                   <div className="entity-card-top">
@@ -65,8 +68,9 @@ export default async function MuralPage() {
                         {post.requer_confirmacao && <span className="badge badge-warning"><span className="badge-dot" />Leitura obrigatoria</span>}
                       </div>
                       <div className="entity-card-name">{text(post.titulo || "Comunicado")}</div>
-                      <div className="entity-card-sub">{text(post.autor || "Sistema")} | {text(post.data || post.publicado_em || "-")} | {text(post.turma || "Todas")}</div>
+                      <div className="entity-card-sub">{text(post.autor || "Sistema")} | {text(post.data || post.publicado_em || "-")} | {turmaDestino}</div>
                     </div>
+                    {canCreate && <MuralPostActions post={post} canPin={canManageAllSchoolContent(session)} turmas={turmas} />}
                   </div>
                   <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>{text(post.mensagem).slice(0, 260)}{text(post.mensagem).length > 260 ? "..." : ""}</p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
