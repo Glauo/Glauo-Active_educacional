@@ -235,6 +235,39 @@ function baseForm(lancamento?: LancamentoData, tipoInicial?: "recebimentos" | "d
   };
 }
 
+function WhatsAppSendButton({ phone, message, label = "WhatsApp" }: { phone: string; message: string; label?: string }) {
+  const [sending, setSending] = useState(false);
+  const telefone = text(phone);
+
+  async function send() {
+    if (!telefone || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone, mensagem: message }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        alert(`WhatsApp nao enviado automaticamente: ${String(data.status || data.error || "verifique a WAPI")}`);
+      } else {
+        alert("Boleto enviado com sucesso por WhatsApp!");
+      }
+    } catch {
+      alert("Erro ao enviar WhatsApp automatico.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!telefone || sending}>
+      {sending ? "Enviando..." : label}
+    </button>
+  );
+}
+
 function LancamentoModal({
   lancamento,
   tipoInicial,
@@ -252,7 +285,7 @@ function LancamentoModal({
   const [form, setForm] = useState<Form>(baseForm(lancamento, tipoInicial));
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
-  const [savedLinks, setSavedLinks] = useState<{ whatsapp: string; email: string; label: string }[]>([]);
+  const [savedLinks, setSavedLinks] = useState<{ whatsapp?: { phone: string; message: string }; email: string; label: string }[]>([]);
   const [boletoPdf, setBoletoPdf] = useState<File | null>(null);
   const isRecebimento = form.tipo_lancamento === "recebimentos";
   const isMensalidade = isRecebimento && form.categoria === "Mensalidade";
@@ -381,8 +414,8 @@ function LancamentoModal({
       const msg = financeMessage(item, window.location.origin);
       links.push({
         label: text(item.parcela) || "Parcela",
-        whatsapp: "",
-        email: mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body),
+        whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
+        email: form.enviar_email ? mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body) : "",
       });
       setSavedLinks(links);
       onSaved();
@@ -441,7 +474,7 @@ function LancamentoModal({
         const msg = financeMessage(item, window.location.origin);
         links.push({
           label: isMensalidade ? "Mensalidade" : `Parcela ${parcelaTxt}`,
-          whatsapp: "",
+          whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
           email: form.enviar_email ? mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body) : "",
         });
       }
@@ -622,6 +655,7 @@ function LancamentoModal({
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {savedLinks.map((link, index) => (
                   <span key={`${link.label}-${index}`} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {link.whatsapp && <WhatsAppSendButton phone={link.whatsapp.phone} message={link.whatsapp.message} label={`WhatsApp ${link.label}`} />}
                     {link.email && <a className="btn btn-secondary btn-sm" href={link.email}>E-mail {link.label}</a>}
                   </span>
                 ))}
@@ -680,7 +714,7 @@ export function ImportarBoletoPdfBtn({
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const [links, setLinks] = useState<{ whatsapp: string; email: string } | null>(null);
+  const [links, setLinks] = useState<{ whatsapp?: { phone: string; message: string }; email: string } | null>(null);
   const [form, setForm] = useState(() => boletoImportForm(alunoInicial));
   const router = useRouter();
 
@@ -732,7 +766,7 @@ export function ImportarBoletoPdfBtn({
       const item = data.lancamento as LancamentoData;
       const msg = financeMessage(item, window.location.origin);
       setLinks({
-        whatsapp: "",
+        whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
         email: form.enviar_email ? mailtoUrl(text(form.aluno_email || item.email), msg.subject, msg.body) : "",
       });
       router.refresh();
@@ -830,6 +864,7 @@ export function ImportarBoletoPdfBtn({
                 <div className="alert alert-success" style={{ marginTop: 12 }}>
                   <div style={{ fontWeight: 800, marginBottom: 8 }}>Boleto salvo. Envie agora:</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {links.whatsapp && <WhatsAppSendButton phone={links.whatsapp.phone} message={links.whatsapp.message} label="WhatsApp" />}
                     {links.email && <a className="btn btn-secondary btn-sm" href={links.email}>Enviar por e-mail</a>}
                   </div>
                 </div>
