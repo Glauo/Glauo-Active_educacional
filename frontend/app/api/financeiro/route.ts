@@ -5,6 +5,7 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { isAdmin } from "@/lib/roles";
 import { financeMessage } from "@/lib/finance-message";
+import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
 
 function text(value: unknown) {
   return String(value || "").trim();
@@ -51,6 +52,34 @@ function shouldSendEmail(data: Record<string, unknown>) {
   return data.enviar_email === true ||
     text(data.enviar_email).toLowerCase() === "true" ||
     text((data.notification_status as Record<string, unknown> | undefined)?.email) === "link_gerado";
+}
+
+async function maybeGenerateMercadoPagoBoleto(
+  lancamento: Record<string, unknown>,
+  id: string,
+  origin: string,
+  wantsBoleto: boolean,
+  hasImportedPdf: boolean,
+) {
+  if (!wantsBoleto || hasImportedPdf) return { ok: true as const, lancamento };
+  if (text(lancamento.mercado_pago_ticket_url).startsWith("http")) return { ok: true as const, lancamento };
+
+  const result = await createMercadoPagoBoleto(lancamento, id, origin);
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      title: result.title,
+      error: result.message,
+      detail: result.detail,
+    };
+  }
+
+  const recebimentos = await dbList<Record<string, unknown>>("receivables.json");
+  const refreshed = recebimentos.find((item) => text(item.id) === id);
+  return {
+    ok: true as const,
+    lancamento: refreshed || applyMercadoPagoToLancamento(lancamento, result),
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -103,15 +132,8 @@ export async function POST(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(data.boleto_pdf_mime) || "application/pdf",
     } : {};
-    const boletoUpdate = data.gerar_boleto ? {
-      boleto_status: "Gerado",
-      boleto_codigo: text(data.boleto_codigo) || `AE-${String(id).slice(0, 8).toUpperCase()}`,
-      boleto_gerado_em: new Date().toISOString(),
-      status: data.status || "Boleto gerado",
-    } : {};
     const novo = {
       ...data,
-      ...boletoUpdate,
       ...pdfUpdate,
       id,
       created_at: new Date().toISOString(),
@@ -120,6 +142,19 @@ export async function POST(req: NextRequest) {
     lancamentos.push(novo);
     await dbSet(key, lancamentos);
     const origin = new URL(req.url).origin;
+
+    if (tipo !== "despesas" && data.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
+      const mp = await maybeGenerateMercadoPagoBoleto(novo, id, origin, true, false);
+      if (!mp.ok) {
+        return NextResponse.json({
+          error: mp.error,
+          title: mp.title,
+          detail: mp.detail,
+          lancamento: novo,
+        }, { status: 422 });
+      }
+      Object.assign(novo, mp.lancamento);
+    }
     if (tipo !== "despesas" && shouldSendWhatsApp(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
@@ -185,13 +220,6 @@ export async function PUT(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(updates.boleto_pdf_mime) || "application/pdf",
     } : {};
-    const boletoUpdate = updates.gerar_boleto ? {
-      boleto_status: "Gerado",
-      boleto_codigo: text(lancamentos[idx].boleto_codigo) || `AE-${String(id).slice(0, 8).toUpperCase()}`,
-      boleto_gerado_em: new Date().toISOString(),
-      status: updates.status || "Boleto gerado",
-    } : {};
-
     const estornoUpdate = isReversal ? {
       status: "Pendente",
       estornado_em: new Date().toISOString(),
@@ -205,7 +233,6 @@ export async function PUT(req: NextRequest) {
     lancamentos[idx] = {
       ...lancamentos[idx],
       ...updates,
-      ...boletoUpdate,
       ...pdfUpdate,
       ...estornoUpdate,
       updated_at: new Date().toISOString(),
@@ -235,6 +262,21 @@ export async function PUT(req: NextRequest) {
 
     await Promise.all(writes);
     const origin = new URL(req.url).origin;
+
+    if (tipo !== "despesas" && updates.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
+      const mp = await maybeGenerateMercadoPagoBoleto(lancamentos[idx], id, origin, true, false);
+      if (!mp.ok) {
+        return NextResponse.json({
+          error: mp.error,
+          title: mp.title,
+          detail: mp.detail,
+          lancamento: lancamentos[idx],
+        }, { status: 422 });
+      }
+      lancamentos[idx] = mp.lancamento;
+      await dbSet(key, lancamentos);
+    }
+
     if (tipo !== "despesas" && shouldSendWhatsApp(updates)) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {

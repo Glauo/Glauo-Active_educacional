@@ -62,9 +62,9 @@ function introFor(category: string) {
 export function financeMessage(row: Record<string, unknown>, origin = "") {
   const id = text(row.id);
   const pdfUrl = text(row.boleto_pdf_url || row.boleto_pdf_public_url);
-  const boletoUrl = text(row.boleto_url);
+  const boletoUrl = text(row.mercado_pago_ticket_url || row.boleto_url);
   const digitableLine = text(row.digitable_line || row.boleto_linha_digitavel);
-  const barcode = text(row.barcode || row.boleto_codigo);
+  const barcode = text(row.boleto_codigo);
   const link = boletoUrl && boletoUrl.startsWith("http")
     ? boletoUrl
     : pdfUrl

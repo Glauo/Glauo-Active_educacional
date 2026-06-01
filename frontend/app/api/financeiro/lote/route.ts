@@ -62,10 +62,7 @@ export async function POST(req: NextRequest) {
       tipo_cobranca: "Mensalidade escolar",
       valor: mensalidade,
       vencimento,
-      status: "Boleto gerado",
-      boleto_status: "Gerado",
-      boleto_codigo: `AE-${competencia.replace("-", "")}-${created.length + 1}`,
-      boleto_gerado_em: new Date().toISOString(),
+      status: "Aberto",
       created_at: new Date().toISOString(),
       created_by: session.pessoa || session.usuario,
     });

@@ -408,7 +408,12 @@ function LancamentoModal({
         },
       };
       const res = await fetchWithTimeout("/api/financeiro", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setErro(String(d.error || "Erro ao salvar.")); return; }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        const detail = text(d.detail);
+        setErro(detail ? `${String(d.error || "Erro ao salvar.")} (${detail})` : String(d.error || "Erro ao salvar."));
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       const item = data.lancamento || payload;
       const msg = financeMessage(item, window.location.origin);
@@ -467,7 +472,8 @@ function LancamentoModal({
       const res = await fetchWithTimeout("/api/financeiro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        erros.push(String(d.error || `Erro na parcela ${i + 1}.`));
+        const detail = text(d.detail);
+        erros.push(detail ? `${String(d.error || `Erro na parcela ${i + 1}.`)} (${detail})` : String(d.error || `Erro na parcela ${i + 1}.`));
       } else {
         const data = await res.json().catch(() => ({}));
         const item = data.lancamento || payload;
