@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useLocale } from "next-intl";
+import { LocaleSwitcher } from "@/components/locale-switcher";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { HomeworkSubmitForm, MuralConfirmButton } from "@/components/school-modules-client";
 import { tagBadge, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
 import { StudentLogoutBtn } from "@/components/student-logout-btn";
@@ -35,23 +38,23 @@ function parseMoney(value: unknown) {
   return Number.parseFloat(text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
 
-function money(value: unknown) {
-  return parseMoney(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function money(value: unknown, locale: string) {
+  return formatCurrency(parseMoney(value), locale);
 }
 
-function dateLabel(value: unknown) {
+function dateLabel(value: unknown, locale: string) {
   const raw = text(value);
   if (!raw) return "-";
   if (/^\d{2}\/\d{2}\/\d{4}/.test(raw)) return raw.slice(0, 10);
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString("pt-BR");
+  const d = new Date(raw.includes("T") ? raw : `${raw}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? raw : formatDate(d, locale);
 }
 
-function dateTimeLabel(value: unknown) {
+function dateTimeLabel(value: unknown, locale: string) {
   const raw = text(value);
   if (!raw) return "-";
   const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? raw : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return Number.isNaN(d.getTime()) ? raw : formatDateTime(d, locale);
 }
 
 function valueOfInstallment(row: Row) {
@@ -127,6 +130,7 @@ function challengeQuestions(desafio: Row): ChallengeQuestion[] {
 }
 
 function StudentChat() {
+  const locale = useLocale();
   const [messages, setMessages] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [mensagem, setMensagem] = useState("");
@@ -169,7 +173,7 @@ function StudentChat() {
           <div className={`student-chat-msg ${text(msg.origem) === "aluno" ? "student-chat-own" : ""}`} key={text(msg.id) || index}>
             <strong>{text(msg.autor || msg.aluno || "Mensagem")}</strong>
             <p>{text(msg.mensagem)}</p>
-            <small>{dateTimeLabel(msg.data)}</small>
+            <small>{dateTimeLabel(msg.data, locale)}</small>
           </div>
         ))}
       </div>
@@ -214,6 +218,7 @@ function StudentWiz() {
 }
 
 export function StudentPortalClient({ session, perfil, muralPosts, licoes, entregas, notas, faturas, desafios, conclusoes, agenda, faltas, biblioteca }: Props) {
+  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTab = text(searchParams.get("tab")) as Tab;
@@ -277,6 +282,7 @@ export function StudentPortalClient({ session, perfil, muralPosts, licoes, entre
         <header className="student-top">
           <div><span>Bem-vindo(a)</span><h1>{nome}</h1></div>
           <div className="student-top-actions">
+            <LocaleSwitcher compact />
             <button className="student-bell" title="Notificações" onClick={() => setTab("inicio")}>
               <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
                 <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6.5V11a7 7 0 0 0-5-6.7V3a2 2 0 1 0-4 0v1.3A7 7 0 0 0 5 11v4.5L3.4 17.1A1.2 1.2 0 0 0 4.2 19h15.6a1.2 1.2 0 0 0 .8-1.9L19 15.5Z" fill="currentColor" />
@@ -293,27 +299,27 @@ export function StudentPortalClient({ session, perfil, muralPosts, licoes, entre
               <div><span>Comunicados não lidos</span><strong>{muralNaoLido}</strong></div>
               <div><span>Tarefas pendentes</span><strong>{pendentes}</strong></div>
               <div><span>Desafios pendentes</span><strong>{desafiosPendentes}</strong></div>
-              <div><span>Débitos em aberto</span><strong>{totalDebitos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div>
+              <div><span>Débitos em aberto</span><strong>{formatCurrency(totalDebitos, locale)}</strong></div>
               <div><span>{pacoteVip ? "Aulas VIP" : "Pontos em desafios"}</span><strong>{pacoteVip ? (pacoteVip.unlimited ? `${pacoteVip.dadas} dadas · Ilimitado` : `${pacoteVip.restantes}/${pacoteVip.total} restantes`) : pontos}</strong></div>
             </section>
             <section className="student-grid">
-              <div className="student-panel"><div className="student-section-head"><div><span>Hoje</span><h2>Próximas aulas</h2></div></div>{agenda.slice(0, 4).length ? agenda.slice(0, 4).map((a, i) => <div className="student-list-row" key={text(a.id) || i}><strong>{text(a.titulo || a.descricao || "Aula")}</strong><span>{dateLabel(a.data || a.date)} {text(a.horario || a.hora)}</span></div>) : <Empty title="Nenhuma aula na agenda" desc="Quando houver aula/evento, aparece aqui." />}</div>
-              <div className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Parcelas abertas</h2></div></div>{debitos.slice(0, 4).length ? debitos.slice(0, 4).map((f, i) => <div className="student-list-row" key={text(f.id) || i}><strong>{text(f.descricao || "Mensalidade")}</strong><span>{money(valueOfInstallment(f))} - vence {dateLabel(f.vencimento || f.data_vencimento)}</span></div>) : <Empty title="Nada em aberto" desc="Você não tem parcelas pendentes." />}</div>
-              <div className="student-panel"><div className="student-section-head"><div><span>Lições</span><h2>Lições de casa</h2></div></div>{licoesOrdenadas.slice(0, 4).length ? licoesOrdenadas.slice(0, 4).map((licao) => <div className="student-list-row" key={text(licao.id)}><strong>{text(licao.titulo || "Lição de casa")}</strong><span>{text(licao.disciplina || "Inglês")} - prazo {dateTimeLabel(licao.due_date)}</span></div>) : <Empty title="Não há lições de casa no momento" desc="Quando uma lição for lançada, ela aparecerá aqui." />}</div>
+              <div className="student-panel"><div className="student-section-head"><div><span>Hoje</span><h2>Próximas aulas</h2></div></div>{agenda.slice(0, 4).length ? agenda.slice(0, 4).map((a, i) => <div className="student-list-row" key={text(a.id) || i}><strong>{text(a.titulo || a.descricao || "Aula")}</strong><span>{dateLabel(a.data || a.date, locale)} {text(a.horario || a.hora)}</span></div>) : <Empty title="Nenhuma aula na agenda" desc="Quando houver aula/evento, aparece aqui." />}</div>
+              <div className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Parcelas abertas</h2></div></div>{debitos.slice(0, 4).length ? debitos.slice(0, 4).map((f, i) => <div className="student-list-row" key={text(f.id) || i}><strong>{text(f.descricao || "Mensalidade")}</strong><span>{money(valueOfInstallment(f), locale)} - vence {dateLabel(f.vencimento || f.data_vencimento, locale)}</span></div>) : <Empty title="Nada em aberto" desc="Você não tem parcelas pendentes." />}</div>
+              <div className="student-panel"><div className="student-section-head"><div><span>Lições</span><h2>Lições de casa</h2></div></div>{licoesOrdenadas.slice(0, 4).length ? licoesOrdenadas.slice(0, 4).map((licao) => <div className="student-list-row" key={text(licao.id)}><strong>{text(licao.titulo || "Lição de casa")}</strong><span>{text(licao.disciplina || "Inglês")} - prazo {dateTimeLabel(licao.due_date, locale)}</span></div>) : <Empty title="Não há lições de casa no momento" desc="Quando uma lição for lançada, ela aparecerá aqui." />}</div>
               <div className="student-panel"><div className="student-section-head"><div><span>Desafios</span><h2>Desafios lançados</h2></div></div>{desafios.slice(0, 4).length ? desafios.slice(0, 4).map((d, i) => <div className="student-list-row" key={text(d.id || d.titulo || d.title) || i}><strong>{text(d.titulo || d.title || "Desafio")}</strong><span>{Number(d.pontos || 0)} pts</span></div>) : <Empty title="Não há desafios no momento" desc="Quando um desafio for lançado, ele aparecerá aqui." />}</div>
             </section>
           </>
         )}
 
-        {tab === "mural" && <section className="student-panel"><div className="student-section-head"><div><span>Mural</span><h2>Comunicados</h2></div></div>{muralPosts.length ? muralPosts.map((post) => <article className="student-card" key={text(post.id || post.titulo)}><div className="student-card-tags"><span className={`badge badge-${tagBadge(text(post.tipo_post || post.tipo))}`}><span className="badge-dot" />{text(post.tipo_post || post.tipo || "Aviso")}</span>{post.fixado && <span className="badge badge-gold">Fixado</span>}</div><h3>{text(post.titulo || "Comunicado")}</h3><p>{text(post.mensagem)}</p><small>{text(post.autor || "Escola")} - {dateLabel(post.publicado_em || post.data)}</small>{(post.requer_confirmacao || (post.enquete_opcoes || []).length > 0) && <MuralConfirmButton post={post} compact />}</article>) : <Empty title="Sem comunicados" desc="Nenhum comunicado publicado para você." />}</section>}
+        {tab === "mural" && <section className="student-panel"><div className="student-section-head"><div><span>Mural</span><h2>Comunicados</h2></div></div>{muralPosts.length ? muralPosts.map((post) => <article className="student-card" key={text(post.id || post.titulo)}><div className="student-card-tags"><span className={`badge badge-${tagBadge(text(post.tipo_post || post.tipo))}`}><span className="badge-dot" />{text(post.tipo_post || post.tipo || "Aviso")}</span>{post.fixado && <span className="badge badge-gold">Fixado</span>}</div><h3>{text(post.titulo || "Comunicado")}</h3><p>{text(post.mensagem)}</p><small>{text(post.autor || "Escola")} - {dateLabel(post.publicado_em || post.data, locale)}</small>{(post.requer_confirmacao || (post.enquete_opcoes || []).length > 0) && <MuralConfirmButton post={post} compact />}</article>) : <Empty title="Sem comunicados" desc="Nenhum comunicado publicado para você." />}</section>}
 
-        {tab === "agenda" && <section className="student-panel"><div className="student-section-head"><div><span>Agenda</span><h2>Aulas e eventos</h2></div></div>{agenda.length ? <table className="data-table"><thead><tr><th>Data</th><th>Horário</th><th>Aula/evento</th><th>Professor</th></tr></thead><tbody>{agenda.map((a, i) => <tr key={text(a.id) || i}><td>{dateLabel(a.data || a.date)}</td><td>{text(a.horario || a.hora || "-")}</td><td>{text(a.titulo || a.descricao || "Aula")}</td><td>{text(a.professor || "-")}</td></tr>)}</tbody></table> : <Empty title="Sem agenda" desc="Nenhuma aula ou evento encontrado para sua turma." />}</section>}
+        {tab === "agenda" && <section className="student-panel"><div className="student-section-head"><div><span>Agenda</span><h2>Aulas e eventos</h2></div></div>{agenda.length ? <table className="data-table"><thead><tr><th>Data</th><th>Horário</th><th>Aula/evento</th><th>Professor</th></tr></thead><tbody>{agenda.map((a, i) => <tr key={text(a.id) || i}><td>{dateLabel(a.data || a.date, locale)}</td><td>{text(a.horario || a.hora || "-")}</td><td>{text(a.titulo || a.descricao || "Aula")}</td><td>{text(a.professor || "-")}</td></tr>)}</tbody></table> : <Empty title="Sem agenda" desc="Nenhuma aula ou evento encontrado para sua turma." />}</section>}
 
-        {tab === "financeiro" && <section className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Boletos e mensalidades</h2></div></div>{faturas.length ? <table className="data-table"><thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Boleto</th></tr></thead><tbody>{faturas.map((f, i) => { const href = boletoHref(f); return <tr key={text(f.id) || i}><td>{text(f.descricao || f.categoria || "Mensalidade")}</td><td>{dateLabel(f.vencimento || f.data_vencimento)}</td><td>{money(valueOfInstallment(f))}</td><td><span className={`badge badge-${statusBadge(f.status || f.situacao)}`}><span className="badge-dot" />{text(f.status || "Pendente")}</span></td><td>{href ? <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">Baixar boleto</a> : "-"}</td></tr>; })}</tbody></table> : <Empty title="Sem faturas" desc="Nenhuma mensalidade encontrada para seu cadastro." />}</section>}
+        {tab === "financeiro" && <section className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Boletos e mensalidades</h2></div></div>{faturas.length ? <table className="data-table"><thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Boleto</th></tr></thead><tbody>{faturas.map((f, i) => { const href = boletoHref(f); return <tr key={text(f.id) || i}><td>{text(f.descricao || f.categoria || "Mensalidade")}</td><td>{dateLabel(f.vencimento || f.data_vencimento, locale)}</td><td>{money(valueOfInstallment(f), locale)}</td><td><span className={`badge badge-${statusBadge(f.status || f.situacao)}`}><span className="badge-dot" />{text(f.status || "Pendente")}</span></td><td>{href ? <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">Baixar boleto</a> : "-"}</td></tr>; })}</tbody></table> : <Empty title="Sem faturas" desc="Nenhuma mensalidade encontrada para seu cadastro." />}</section>}
 
-        {tab === "notas" && <section className="student-panel"><div className="student-section-head"><div><span>Boletim</span><h2>Notas e frequência</h2></div><span className="badge badge-warning">{faltas} faltas</span></div>{notas.length ? <table className="data-table"><thead><tr><th>Atividade</th><th>Nota</th><th>Status</th><th>Data</th></tr></thead><tbody>{notas.map((n, i) => <tr key={text(n.id) || i}><td>{text(n.titulo || n.desafio || "Atividade")}</td><td><span className="badge badge-gold">{Number(n.nota || n.score || 0).toFixed(1)}</span></td><td>{text(n.status || "Corrigido")}</td><td>{dateLabel(n.data || n.created_at)}</td></tr>)}</tbody></table> : <Empty title="Sem notas publicadas" desc="As notas aparecem após correção do professor." />}</section>}
+        {tab === "notas" && <section className="student-panel"><div className="student-section-head"><div><span>Boletim</span><h2>Notas e frequência</h2></div><span className="badge badge-warning">{faltas} faltas</span></div>{notas.length ? <table className="data-table"><thead><tr><th>Atividade</th><th>Nota</th><th>Status</th><th>Data</th></tr></thead><tbody>{notas.map((n, i) => <tr key={text(n.id) || i}><td>{text(n.titulo || n.desafio || "Atividade")}</td><td><span className="badge badge-gold">{Number(n.nota || n.score || 0).toFixed(1)}</span></td><td>{text(n.status || "Corrigido")}</td><td>{dateLabel(n.data || n.created_at, locale)}</td></tr>)}</tbody></table> : <Empty title="Sem notas publicadas" desc="As notas aparecem após correção do professor." />}</section>}
 
-        {tab === "licoes" && <section className="student-panel"><div className="student-section-head"><div><span>Tarefas</span><h2>Lições de casa</h2></div></div>{licoesOrdenadas.length ? licoesOrdenadas.map((licao) => <article className="student-card" key={text(licao.id)}><div className="student-card-tags"><span className="badge badge-info">{text(licao.disciplina || "Inglês")}</span><span className={`badge badge-${statusBadge(entregasPorLicao.get(text(licao.id))?.status || "Pendente")}`}>{text(entregasPorLicao.get(text(licao.id))?.status || "Pendente")}</span></div><h3>{text(licao.titulo)}</h3><p>{text(licao.descricao)}</p><small>Prazo: {dateTimeLabel(licao.due_date)}</small><HomeworkSubmitForm homework={licao} submission={entregasPorLicao.get(text(licao.id))} /></article>) : <Empty title="Não há lições de casa no momento" desc="Quando uma lição for lançada, ela aparecerá aqui." />}</section>}
+        {tab === "licoes" && <section className="student-panel"><div className="student-section-head"><div><span>Tarefas</span><h2>Lições de casa</h2></div></div>{licoesOrdenadas.length ? licoesOrdenadas.map((licao) => <article className="student-card" key={text(licao.id)}><div className="student-card-tags"><span className="badge badge-info">{text(licao.disciplina || "Inglês")}</span><span className={`badge badge-${statusBadge(entregasPorLicao.get(text(licao.id))?.status || "Pendente")}`}>{text(entregasPorLicao.get(text(licao.id))?.status || "Pendente")}</span></div><h3>{text(licao.titulo)}</h3><p>{text(licao.descricao)}</p><small>Prazo: {dateTimeLabel(licao.due_date, locale)}</small><HomeworkSubmitForm homework={licao} submission={entregasPorLicao.get(text(licao.id))} /></article>) : <Empty title="Não há lições de casa no momento" desc="Quando uma lição for lançada, ela aparecerá aqui." />}</section>}
 
         {tab === "desafios" && (
           <section className="student-panel">

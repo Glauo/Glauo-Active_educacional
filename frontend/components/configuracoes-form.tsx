@@ -1,8 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { DEFAULT_LOCALE, type AppLocale } from "@/lib/locale";
 
-type SistemaConfig = { nome_escola?: string; cnpj?: string; telefone?: string; email_contato?: string; endereco?: string; cidade?: string; estado?: string; cep?: string; [k: string]: unknown };
+type SistemaConfig = {
+  display_language?: string;
+  nome_escola?: string; cnpj?: string; telefone?: string; email_contato?: string; endereco?: string; cidade?: string; estado?: string; cep?: string; [k: string]: unknown };
 type SmtpConfig = { host?: string; port?: number | string; user?: string; from_name?: string; from_email?: string; tls?: string | boolean; enabled?: boolean; [k: string]: unknown };
 type BoletoConfig = { banco?: string; agencia?: string; conta?: string; cedente?: string; carteira?: string; instrucoes?: string; dias_vencimento?: number | string; mp_access_token?: string; mp_public_key?: string; mp_client_id?: string; [k: string]: unknown };
 
@@ -22,7 +26,13 @@ async function salvarSecao(secao: string, dados: Record<string, unknown>): Promi
 }
 
 export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) {
-  const [sistema, setSistema] = useState<SistemaConfig>(s0);
+  const t = useTranslations("settings");
+  const tc = useTranslations("common");
+  const tl = useTranslations("locale");
+  const [sistema, setSistema] = useState<SistemaConfig>({
+    ...s0,
+    display_language: (s0.display_language as AppLocale) || DEFAULT_LOCALE,
+  });
   const [smtp, setSmtp] = useState<SmtpConfig>(m0);
   const [boleto, setBoleto] = useState<BoletoConfig>(b0);
   const [smtpSenha, setSmtpSenha] = useState("");
@@ -46,7 +56,7 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
     ]);
     setSaving(false);
     const erro = erros.find(Boolean);
-    setFeedback(erro ? { tipo: "erro", msg: erro } : { tipo: "ok", msg: "Configurações salvas com sucesso!" });
+    setFeedback(erro ? { tipo: "erro", msg: erro } : { tipo: "ok", msg: tc("savedSuccess") });
     setTimeout(() => setFeedback(null), 4000);
   }
 
@@ -98,9 +108,9 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
       {/* Header fixo com botão salvar */}
       <div className="page-header">
         <div className="page-title-block">
-          <div className="page-eyebrow"><span className="page-eyebrow-dot" />Sistema</div>
-          <h1 className="page-title">Configurações</h1>
-          <p className="page-description">Parâmetros gerais do sistema, integrações e permissões por perfil.</p>
+          <div className="page-eyebrow"><span className="page-eyebrow-dot" />{t("eyebrow")}</div>
+          <h1 className="page-title">{t("title")}</h1>
+          <p className="page-description">{t("description")}</p>
         </div>
         <div className="page-actions">
           <input
@@ -133,12 +143,38 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
           </button>
           <button className="btn btn-primary" onClick={salvarTudo} disabled={saving}>
             <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-            {saving ? "Salvando…" : "Salvar alterações"}
+            {saving ? tc("saving") : tc("save")}
           </button>
         </div>
       </div>
 
       <div className="content-grid grid-2">
+        {/* Idioma de exibição */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="section-eyebrow">{t("displayLanguage.eyebrow")}</div>
+              <h3 className="section-title">{t("displayLanguage.title")}</h3>
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="form-grid">
+              <div className="form-group form-group-span2">
+                <label className="form-label">{t("displayLanguage.label")}</label>
+                <select
+                  className="form-input"
+                  value={String(sistema.display_language || DEFAULT_LOCALE)}
+                  onChange={(e) => sys("display_language", e.target.value)}
+                >
+                  <option value="pt-BR">{tl("ptBR")}</option>
+                  <option value="en-US">{tl("enUS")}</option>
+                </select>
+                <div className="form-help">{t("displayLanguage.help")}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Dados da escola */}
         <div className="card">
           <div className="card-header">

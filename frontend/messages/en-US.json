@@ -1,0 +1,113 @@
+{
+  "common": {
+    "save": "Save changes",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "error": "Error",
+    "savedSuccess": "Settings saved successfully!"
+  },
+  "locale": {
+    "label": "Display language",
+    "ptBR": "Portuguese (Brazil)",
+    "enUS": "English (US)"
+  },
+  "shell": {
+    "brandName": "Ativo Educacional",
+    "brandTagline": "Educational System",
+    "systemOperational": "System operational",
+    "greeting": "Hello, {name}",
+    "logout": "Sign out",
+    "loggingOut": "Signing out...",
+    "openMenu": "Open menu",
+    "notifications": "Notifications",
+    "breadcrumbRoot": "Ativo Educacional"
+  },
+  "nav": {
+    "sections": {
+      "principal": "Main",
+      "academic": "Academic",
+      "management": "Management"
+    },
+    "items": {
+      "root": "Dashboard",
+      "alunos": "Students",
+      "professores": "Teachers",
+      "turmas": "Classes",
+      "agenda": "Schedule",
+      "mural": "Wall",
+      "licoes": "Homework",
+      "correcao-licoes": "Homework Review",
+      "desafios": "Challenges",
+      "notas": "Grades",
+      "biblioteca": "Library",
+      "financeiro": "Finance",
+      "comercial": "Sales",
+      "atendimento": "Support",
+      "estoque": "Inventory",
+      "wiz": "Wiz AI",
+      "condojob": "CondoJob",
+      "configuracoes": "Settings",
+      "usuarios_credenciais": "Access"
+    }
+  },
+  "login": {
+    "headline": "The platform that transforms your school",
+    "feature1Title": "Complete Student Management",
+    "feature1Desc": "Enrollment, attendance, performance, and financial history in one place.",
+    "feature2Title": "Smart Finance",
+    "feature2Desc": "Receivables, delinquency tracking, and automated reports.",
+    "feature3Title": "Wiz AI — Virtual Assistant",
+    "feature3Desc": "AI that automates tasks and responds to students via WhatsApp.",
+    "statsLabel": "System features",
+    "statPortal": "Portal",
+    "statPortalDesc": "Student, guardian, and teacher",
+    "statFinance": "Finance",
+    "statFinanceDesc": "Invoices, installments, and payments",
+    "statWapi": "W-API",
+    "statWapiDesc": "Automated WhatsApp messaging",
+    "badge": "Exclusive access - Educational System",
+    "title": "Welcome back",
+    "subtitle": "Sign in with your credentials to access the system.",
+    "unit": "Branch / Unit",
+    "user": "Username",
+    "userPlaceholder": "Your access username",
+    "password": "Password",
+    "submit": "Access system",
+    "submitting": "Verifying...",
+    "invalidCredentials": "Invalid credentials. Please try again.",
+    "connectionError": "Connection error. Check your internet and try again.",
+    "secure": "Secure connection — SSL/TLS",
+    "footer": "Ativo Educacional 2026 - Educational Management System"
+  },
+  "alunoLogin": {
+    "title": "Student Area",
+    "subtitle": "Access your challenges, materials, and track your progress at Ativo Educacional.",
+    "feature1": "Challenges and scoring",
+    "feature2": "Library and materials",
+    "feature3": "Your progress and history",
+    "welcome": "Welcome back",
+    "instructions": "Use the login and password provided by your school.",
+    "login": "Login",
+    "loginPlaceholder": "Your access login",
+    "password": "Password",
+    "passwordPlaceholder": "Your password",
+    "submit": "Enter my area",
+    "submitting": "Signing in…",
+    "invalidCredentials": "Incorrect login or password.",
+    "connectionError": "Connection error. Please try again.",
+    "help": "Problems with your access? Contact the school office.",
+    "adminLink": "Administrative access →"
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "General system parameters, integrations, and profile permissions.",
+    "eyebrow": "System",
+    "displayLanguage": {
+      "eyebrow": "Regionalization",
+      "title": "Display language",
+      "label": "Default system language",
+      "help": "Sets the interface language and date/number formats for new sessions. Users can change it in the top bar."
+    }
+  }
+}
