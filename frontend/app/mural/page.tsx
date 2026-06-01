@@ -13,6 +13,18 @@ function sortPosts(posts: WallPost[]) {
   });
 }
 
+function notificationSummary(post: WallPost) {
+  const status = post.notification_status && typeof post.notification_status === "object" ? post.notification_status as Record<string, unknown> : {};
+  const whatsapp = text(status.whatsapp || "pendente");
+  const email = text(status.email || "pendente");
+  const total = text(status.total_destinatarios);
+  if (whatsapp === "rascunho" || email === "rascunho") return "Envio em rascunho";
+  if (whatsapp.includes("erro") || email.includes("erro")) return "Falha no envio automatico";
+  if (whatsapp.includes("sem_destinatarios") && email.includes("sem_destinatarios")) return "Sem destinatarios";
+  if (whatsapp.includes("enviados:") || email.includes("enviados:")) return `Envio automatico: ${total || "0"} destinatario(s)`;
+  return "WhatsApp/e-mail pendente";
+}
+
 export default async function MuralPage() {
   const session = await getSession();
   if (!session) redirect("/login");
@@ -76,7 +88,7 @@ export default async function MuralPage() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span className="badge badge-neutral"><span className="badge-dot" />{confirmacoes} confirmacoes</span>
                     <span className="badge badge-neutral"><span className="badge-dot" />{votos} votos</span>
-                    <span className="badge badge-info"><span className="badge-dot" />WhatsApp/e-mail pendente</span>
+                    <span className="badge badge-info"><span className="badge-dot" />{notificationSummary(post)}</span>
                   </div>
                 </article>
               );
