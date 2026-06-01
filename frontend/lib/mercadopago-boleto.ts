@@ -1,4 +1,5 @@
 import { dbGet, dbList, dbSet } from "@/lib/db";
+import { criarPagamentoBoleto, resolveIdentification } from "@/lib/criar-pagamento-boleto";
 
 type Row = Record<string, unknown>;
 
@@ -116,6 +117,14 @@ export function expirationDate(value: unknown) {
   return date.toISOString();
 }
 
+function formatMercadoPagoErrorDetail(details: unknown) {
+  if (!details || typeof details !== "object") return text(details);
+  const row = details as Record<string, unknown>;
+  const cause = Array.isArray(row.cause) ? row.cause : [];
+  const firstCause = cause[0] && typeof cause[0] === "object" ? cause[0] as Record<string, unknown> : null;
+  return text(firstCause?.description || row.message || row.error || JSON.stringify(details).slice(0, 220));
+}
+
 export async function createMercadoPagoBoleto(
   lancamento: Row,
   id: string,
@@ -151,7 +160,24 @@ export async function createMercadoPagoBoleto(
   }
 
   const nome = text(lancamento.aluno || lancamento.nome || lancamento.pagador || "Aluno Active");
-  const cpf = digits(lancamento.cpf || lancamento.aluno_cpf || lancamento.responsavel_cpf || aluno?.cpf || aluno?.responsavel_cpf);
+  const documento = digits(
+    lancamento.cpf ||
+    lancamento.aluno_cpf ||
+    lancamento.responsavel_cpf ||
+    aluno?.cpf ||
+    aluno?.responsavel_cpf ||
+    aluno?.cnpj ||
+    lancamento.cnpj
+  );
+  const identification = resolveIdentification(documento);
+  if (!identification) {
+    return {
+      ok: false,
+      title: "CPF/CNPJ obrigatorio",
+      message: "O Mercado Pago exige CPF (11 digitos) ou CNPJ (14 digitos) do pagador para gerar boleto.",
+    };
+  }
+
   const address = payerAddress(lancamento, aluno, sistema);
   if (!address.zip_code) {
     return {
@@ -161,35 +187,15 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const payload: Record<string, unknown> = {
-    transaction_amount: amount,
+  const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
+  const result = await criarPagamentoBoleto({
+    accessToken: token,
+    transactionAmount: amount,
     description: text(lancamento.descricao) || "Mensalidade escolar",
-    payment_method_id: "bolbradesco",
-    date_of_expiration: expirationDate(lancamento.vencimento || lancamento.data_vencimento),
-    external_reference: id,
-    binary_mode: true,
-    statement_descriptor: "ACTIVE EDUCACIONAL",
-    payer: {
-      email,
-      first_name: firstName(nome),
-      last_name: lastName(nome),
-      ...(cpf.length === 11 ? { identification: { type: "CPF", number: cpf } } : {}),
-      address,
-    },
-    additional_info: {
-      items: [{
-        id,
-        title: text(lancamento.descricao) || "Mensalidade escolar",
-        description: text(lancamento.observacoes) || text(lancamento.categoria) || "Servico educacional",
-        quantity: 1,
-        unit_price: amount,
-        category_id: "services",
-      }],
-      payer: {
-        first_name: firstName(nome),
-        last_name: lastName(nome),
-      },
-    },
+    externalReference: id,
+    dateOfExpiration: expirationDate(lancamento.vencimento || lancamento.data_vencimento),
+    notificationUrl,
+    idempotencyKey: `active-boleto-${id}`,
     metadata: {
       sistema: "active_educacional",
       lancamento_id: id,
@@ -197,62 +203,41 @@ export async function createMercadoPagoBoleto(
       aluno_id: text(lancamento.aluno_id || aluno?.id),
       aluno_login: text(lancamento.aluno_login || aluno?.login || aluno?.usuario),
     },
-  };
-
-  const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
-  if (notificationUrl) payload.notification_url = notificationUrl;
-
-  const res = await fetch("https://api.mercadopago.com/v1/payments", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      "X-Idempotency-Key": `active-boleto-${id}`,
+    payer: {
+      email,
+      firstName: firstName(nome),
+      lastName: lastName(nome),
+      identificationType: identification.type,
+      identificationNumber: identification.number,
+      address,
     },
-    body: JSON.stringify(payload),
   });
-  const data = await res.json().catch(() => ({})) as Row;
-  if (!res.ok) {
+
+  if (!result.ok) {
     return {
       ok: false,
       title: "Falha ao gerar boleto Mercado Pago",
-      message: "O Mercado Pago recusou a geracao do boleto. Revise token, e-mail, CPF e valor do lancamento.",
-      detail: text(data.message || data.error || JSON.stringify(data).slice(0, 220)),
+      message: result.message,
+      detail: formatMercadoPagoErrorDetail(result.details),
     };
   }
 
-  const details = (data.transaction_details || {}) as Row;
-  const point = (data.point_of_interaction || {}) as Row;
-  const transactionData = (point.transaction_data || {}) as Row;
-  const barcode = (data.barcode || {}) as Row;
-  const boletoUrl = text(details.external_resource_url || data.external_resource_url || transactionData.ticket_url);
-  const linha = text(details.digitable_line || barcode.content);
-  if (!boletoUrl) {
-    return {
-      ok: false,
-      title: "Boleto gerado sem link",
-      message: "O Mercado Pago retornou pagamento, mas nao enviou o link do boleto. Verifique a conta Mercado Pago.",
-      detail: text(data.id),
-    };
-  }
-
-  const paymentId = text(data.id);
   const recebimentos = await dbList<Row>("receivables.json");
   await dbSet("receivables.json", recebimentos.map((item) => text(item.id) === id ? {
     ...item,
-    mercado_pago_payment_id: paymentId,
-    mercado_pago_status: text(data.status),
-    mercado_pago_detail: text(data.status_detail),
-    mercado_pago_ticket_url: boletoUrl,
-    boleto_pdf_url: boletoUrl,
-    boleto_linha_digitavel: linha,
+    mercado_pago_payment_id: result.paymentId,
+    mercado_pago_status: result.status,
+    mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
+    mercado_pago_ticket_url: result.pdfUrl,
+    boleto_pdf_url: result.pdfUrl,
+    boleto_linha_digitavel: result.linhaDigitavel,
     boleto_status: "Mercado Pago",
-    boleto_codigo: paymentId || text(item.boleto_codigo),
+    boleto_codigo: result.paymentId || text(item.boleto_codigo),
     boleto_gerado_em: new Date().toISOString(),
     status: text(item.status) || "Boleto gerado",
   } : item));
 
-  return { ok: true, url: boletoUrl, linha, paymentId };
+  return { ok: true, url: result.pdfUrl, linha: result.linhaDigitavel, paymentId: result.paymentId };
 }
 
 export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<MercadoPagoBoletoResult, { ok: true }>) {
@@ -268,3 +253,5 @@ export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<Me
     status: text(lancamento.status) || "Boleto gerado",
   };
 }
+
+export { criarPagamentoBoleto } from "@/lib/criar-pagamento-boleto";
