@@ -103,10 +103,20 @@ function expirationDate(value: unknown) {
   let date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+  
+  // Se a data for no passado, usar 3 dias a partir de hoje
   if (date < now) {
     date = new Date();
     date.setDate(date.getDate() + 3);
   }
+  
+  // Garantir que não ultrapassa 29 dias a partir de hoje (limite do Mercado Pago)
+  const maxDate = new Date();
+  maxDate.setDate(maxDate.getDate() + 29);
+  if (date > maxDate) {
+    date = new Date(maxDate);
+  }
+  
   date.setHours(23, 59, 0, 0);
   return date.toISOString();
 }
