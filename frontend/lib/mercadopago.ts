@@ -1,14 +1,14 @@
 /**
- * Integração com a API do Mercado Pago — Boleto Bancário (Registrado)
- * Documentação: https://www.mercadopago.com.br/developers/pt/docs
+ * IntegraÃ§Ã£o com a API do Mercado Pago â€” Boleto BancÃ¡rio (Registrado)
+ * DocumentaÃ§Ã£o: https://www.mercadopago.com.br/developers/pt/docs
  *
- * IMPORTANTE: Boleto registrado exige endereço completo do pagador.
- * Se o aluno não tiver endereço cadastrado, usa o endereço da escola como fallback.
+ * IMPORTANTE: Boleto registrado exige endereÃ§o completo do pagador.
+ * Se o aluno nÃ£o tiver endereÃ§o cadastrado, usa o endereÃ§o da escola como fallback.
  *
- * O Access Token é lido na seguinte ordem de prioridade:
- *  1. Variável de ambiente MP_ACCESS_TOKEN ou MERCADOPAGO_ACCESS_TOKEN
- *  2. Campo mp_access_token salvo em boleto_config.json (via tela de Configurações)
- *  3. Token padrão embutido (fallback)
+ * O Access Token Ã© lido na seguinte ordem de prioridade:
+ *  1. VariÃ¡vel de ambiente MP_ACCESS_TOKEN ou MERCADOPAGO_ACCESS_TOKEN
+ *  2. Campo mp_access_token salvo em boleto_config.json (via tela de ConfiguraÃ§Ãµes)
+ *  3. Token padrÃ£o embutido (fallback)
  */
 
 import { dbGet } from "@/lib/db";
@@ -49,8 +49,8 @@ export interface MpBoletoResult {
 }
 
 /**
- * Endereço padrão da escola — usado quando o aluno não tem endereço cadastrado.
- * O Mercado Pago EXIGE endereço completo para boleto registrado.
+ * EndereÃ§o padrÃ£o da escola â€” usado quando o aluno nÃ£o tem endereÃ§o cadastrado.
+ * O Mercado Pago EXIGE endereÃ§o completo para boleto registrado.
  */
 const DEFAULT_ADDRESS: MpPayerAddress = {
   zip_code: "14401-000",
@@ -61,8 +61,29 @@ const DEFAULT_ADDRESS: MpPayerAddress = {
   federal_unit: "SP",
 };
 
+function formatMpDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T23:59:59.000-03:00`;
+}
+
+function normalizeExpiration(value?: string) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let date = value ? new Date(value) : new Date(NaN);
+  if (Number.isNaN(date.getTime()) || date < now) {
+    date = new Date(now);
+    date.setDate(date.getDate() + 3);
+  }
+
+  const maxDate = new Date(now);
+  maxDate.setDate(maxDate.getDate() + 29);
+  if (date > maxDate) date = maxDate;
+
+  return formatMpDate(date);
+}
+
 async function getAccessToken(): Promise<string> {
-  // 1. Variável de ambiente
+  // 1. VariÃ¡vel de ambiente
   const envToken =
     process.env.ACTIVE_MERCADO_PAGO_ACCESS_TOKEN ||
     process.env.MERCADO_PAGO_ACCESS_TOKEN ||
@@ -70,7 +91,7 @@ async function getAccessToken(): Promise<string> {
     process.env.MERCADOPAGO_ACCESS_TOKEN;
   if (envToken) return envToken;
 
-  // 2. Configuração salva no banco de dados
+  // 2. ConfiguraÃ§Ã£o salva no banco de dados
   try {
     const boletoConfig = await dbGet<Record<string, unknown>>("boleto_config.json");
     const dbToken = String(
@@ -85,13 +106,13 @@ async function getAccessToken(): Promise<string> {
     // ignora erro de leitura do banco
   }
 
-  // 3. Fallback: token padrão
+  // 3. Fallback: token padrÃ£o
   return "";
 }
 
 /**
- * Busca o endereço padrão da escola nas configurações do sistema.
- * Se não encontrar, usa o DEFAULT_ADDRESS hardcoded.
+ * Busca o endereÃ§o padrÃ£o da escola nas configuraÃ§Ãµes do sistema.
+ * Se nÃ£o encontrar, usa o DEFAULT_ADDRESS hardcoded.
  */
 async function getDefaultAddress(): Promise<MpPayerAddress> {
   try {
@@ -107,7 +128,7 @@ async function getDefaultAddress(): Promise<MpPayerAddress> {
         city: String(config.cidade || config.city || DEFAULT_ADDRESS.city).trim() || DEFAULT_ADDRESS.city,
         federal_unit: String(config.estado || config.uf || config.federal_unit || DEFAULT_ADDRESS.federal_unit).trim().toUpperCase().slice(0, 2) || DEFAULT_ADDRESS.federal_unit,
       };
-      // Só retorna se tem pelo menos CEP e cidade preenchidos
+      // SÃ³ retorna se tem pelo menos CEP e cidade preenchidos
       if (addr.zip_code && addr.city) return addr;
     }
   } catch {
@@ -117,8 +138,8 @@ async function getDefaultAddress(): Promise<MpPayerAddress> {
 }
 
 /**
- * Cria um boleto bancário registrado via API do Mercado Pago.
- * Retorna a URL do boleto (external_resource_url), código de barras e linha digitável.
+ * Cria um boleto bancÃ¡rio registrado via API do Mercado Pago.
+ * Retorna a URL do boleto (external_resource_url), cÃ³digo de barras e linha digitÃ¡vel.
  */
 export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBoletoResult> {
   const accessToken = await getAccessToken();
@@ -129,18 +150,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     };
   }
 
-  // Data de expiração padrão: 3 dias a partir de hoje
-  const expiration =
-    input.date_of_expiration ||
-    (() => {
-      const d = new Date();
-      d.setDate(d.getDate() + 3);
-      d.setHours(23, 59, 59, 0);
-      const offset = "-03:00";
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000${offset}`;
-    })();
-
+  const expiration = normalizeExpiration(input.date_of_expiration);
   const [boletoConfig, sistemaConfig] = await Promise.all([
     dbGet<Record<string, unknown>>("boleto_config.json").catch(() => null),
     dbGet<Record<string, unknown>>("sistema_config.json").catch(() => null),
@@ -156,12 +166,12 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     process.env.MERCADO_PAGO_PAYER_DOCUMENT ||
     ""
   ).replace(/\D/g, "");
-  // Só envia CPF se tiver 11 dígitos e não for sequência de zeros
+  // SÃ³ envia CPF se tiver 11 dÃ­gitos e nÃ£o for sequÃªncia de zeros
   const cpfValido = (cpfLimpo.length === 11 || cpfLimpo.length === 14) && !/^0+$/.test(cpfLimpo) && !/^(\d)\1+$/.test(cpfLimpo);
   const cpfFinal = cpfValido ? cpfLimpo : null;
   const cpfTipo = cpfFinal?.length === 14 ? "CNPJ" : "CPF";
 
-  // Endereço: usa o do aluno se fornecido, senão busca o padrão da escola
+  // EndereÃ§o: usa o do aluno se fornecido, senÃ£o busca o padrÃ£o da escola
   let address: MpPayerAddress;
   if (input.payer_address && input.payer_address.zip_code && input.payer_address.city) {
     address = input.payer_address;
@@ -208,7 +218,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
         "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(body),
-      redirect: "follow", // CORREÇÃO: segue redirects (incluindo 307)
+      redirect: "follow", // CORREÃ‡ÃƒO: segue redirects (incluindo 307)
     });
 
     const data = (await res.json()) as Record<string, unknown>;
