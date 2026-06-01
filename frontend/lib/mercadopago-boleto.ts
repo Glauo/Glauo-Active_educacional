@@ -167,7 +167,14 @@ export async function createMercadoPagoBoleto(
     aluno?.cpf ||
     aluno?.responsavel_cpf ||
     aluno?.cnpj ||
-    lancamento.cnpj
+    lancamento.cnpj ||
+    config?.payer_document ||
+    config?.cpf ||
+    config?.cnpj ||
+    sistema?.cnpj ||
+    sistema?.cpf ||
+    process.env.ACTIVE_MERCADO_PAGO_PAYER_DOCUMENT ||
+    process.env.MERCADO_PAGO_PAYER_DOCUMENT
   );
   const identification = resolveIdentification(documento);
   if (!identification) {

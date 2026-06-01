@@ -167,8 +167,103 @@ function LegacyAutoWhatsAppButton({ phone, message, label = "WhatsApp" }: { phon
 }
 
 function boletoPdfHref(lancamento: Lancamento) {
+  const mercadoPago = String(lancamento.mercado_pago_ticket_url || "").trim();
+  if (mercadoPago.startsWith("http")) return mercadoPago;
   if (lancamento.boleto_pdf_b64 && lancamento.id) return `/api/financeiro/boleto-pdf?id=${encodeURIComponent(String(lancamento.id))}`;
   return String(lancamento.boleto_pdf_url || "");
+}
+
+function absoluteUrl(url: string) {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return `${origin}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+function boletoLink(lancamento: Lancamento) {
+  const href = boletoPdfHref(lancamento);
+  if (href) return absoluteUrl(href);
+  const id = String(lancamento.id || "");
+  return id ? absoluteUrl(`/api/financeiro/boleto?id=${encodeURIComponent(id)}`) : "";
+}
+
+function financePhone(lancamento: Lancamento) {
+  return String(
+    lancamento.telefone ||
+    lancamento.whatsapp ||
+    lancamento.celular ||
+    lancamento.responsavel_telefone ||
+    lancamento.telefone_responsavel ||
+    lancamento.celular_responsavel ||
+    lancamento.whatsapp_responsavel ||
+    ""
+  ).trim();
+}
+
+function financeEmail(lancamento: Lancamento) {
+  return String(
+    lancamento.email ||
+    lancamento.aluno_email ||
+    lancamento.responsavel_email ||
+    lancamento.email_responsavel ||
+    ""
+  ).trim();
+}
+
+function boletoErrorMessage(data: Record<string, unknown>) {
+  return [
+    String(data.title || "Erro ao gerar boleto Mercado Pago"),
+    String(data.error || "Nao foi possivel gerar o boleto."),
+    String(data.detail || ""),
+  ].filter(Boolean).join("\n");
+}
+
+function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
+  const [sending, setSending] = useState(false);
+  const phone = financePhone(lancamento);
+
+  async function send() {
+    if (!phone || sending) return;
+    setSending(true);
+    try {
+      let current: Lancamento = lancamento;
+      if (!String(current.mercado_pago_ticket_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim()) {
+        const res = await fetch("/api/financeiro", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: current.id, tipo: "recebimentos", gerar_boleto: true })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          alert(boletoErrorMessage(data));
+          return;
+        }
+        current = (data.lancamento || current) as Lancamento;
+      }
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const link = boletoLink(current);
+      const message = financeMessage({ ...current, mercado_pago_ticket_url: link }, origin).body;
+      const sendRes = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefone: phone, mensagem: message }),
+      });
+      const sendData = await sendRes.json().catch(() => ({}));
+      if (!sendRes.ok || !sendData.ok) {
+        alert(`WhatsApp nao enviado automaticamente: ${String(sendData.status || sendData.error || "verifique a WAPI")}`);
+      }
+    } catch {
+      alert("Erro ao enviar boleto por WhatsApp.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!phone || sending} title={!phone ? "Sem telefone cadastrado" : ""}>
+      {sending ? "Enviando..." : "WhatsApp"}
+    </button>
+  );
 }
 
 /* ── Agrupamento por mês ── */
@@ -215,28 +310,33 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
   const pdfHref = boletoPdfHref(lancamento);
-  const boletoLink = pdfHref
-    ? (pdfHref.startsWith("http") ? pdfHref : `${typeof window !== "undefined" ? window.location.origin : ""}${pdfHref}`)
-    : `${typeof window !== "undefined" ? window.location.origin : ""}/api/financeiro/boleto?id=${id}`;
-  const msg = financeMessage({ ...lancamento, boleto_pdf_url: pdfHref || boletoLink }, typeof window !== "undefined" ? window.location.origin : "").body;
 
   async function gerar() {
     if (!id) return;
     setLoading(true);
-    await fetch("/api/financeiro", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, tipo: "recebimentos", gerar_boleto: true })
-    });
-    setLoading(false);
-    window.open(`/api/financeiro/boleto?id=${id}`, "_blank");
+    try {
+      const res = await fetch("/api/financeiro", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, tipo: "recebimentos", gerar_boleto: true })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        alert(boletoErrorMessage(data));
+        return;
+      }
+      const next = (data.lancamento || lancamento) as Lancamento;
+      window.open(boletoLink(next) || `/api/financeiro/boleto?id=${id}`, "_blank");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <>
-      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">Abrir PDF</a>}
-      <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Boleto PDF"}</button>
-      <AutoWhatsAppButton phone={lancamento.telefone || lancamento.whatsapp} message={msg} />
+      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{String(lancamento.mercado_pago_ticket_url || "").startsWith("http") ? "Abrir boleto" : "Abrir PDF"}</a>}
+      <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar boleto MP"}</button>
+      <BoletoWhatsAppButton lancamento={lancamento} />
     </>
   );
 }

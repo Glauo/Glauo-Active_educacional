@@ -42,6 +42,29 @@ function shouldSendWhatsApp(data: Record<string, unknown>) {
     text((data.notification_status as Record<string, unknown> | undefined)?.whatsapp) === "link_gerado";
 }
 
+function phoneOf(data: Record<string, unknown>) {
+  return text(
+    data.telefone ||
+    data.whatsapp ||
+    data.celular ||
+    data.responsavel_telefone ||
+    data.telefone_responsavel ||
+    data.celular_responsavel ||
+    data.whatsapp_responsavel ||
+    data.aluno_telefone
+  );
+}
+
+function emailOf(data: Record<string, unknown>) {
+  return text(
+    data.email ||
+    data.aluno_email ||
+    data.responsavel_email ||
+    data.email_responsavel ||
+    data.emailResponsavel
+  );
+}
+
 function runNotification(task: Promise<unknown>, label: string) {
   void task.catch((err) => {
     console.error(`[financeiro notificacao ${label}]`, err);
@@ -158,7 +181,7 @@ export async function POST(req: NextRequest) {
     if (tipo !== "despesas" && shouldSendWhatsApp(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
-        const result = await sendWhatsApp(novo.telefone || novo.whatsapp, message.body, session);
+        const result = await sendWhatsApp(phoneOf(novo), message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const notificationStatus = { ...(novo.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
         await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
@@ -167,7 +190,7 @@ export async function POST(req: NextRequest) {
     if (tipo !== "despesas" && shouldSendEmail(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
-        const result = await sendEmail(novo.email, message.subject, message.body, session);
+        const result = await sendEmail(emailOf(novo), message.subject, message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || novo;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
@@ -281,7 +304,7 @@ export async function PUT(req: NextRequest) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
-        const result = await sendWhatsApp(lancamento.telefone || lancamento.whatsapp, message.body, session);
+        const result = await sendWhatsApp(phoneOf(lancamento), message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || lancamento;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
@@ -292,7 +315,7 @@ export async function PUT(req: NextRequest) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
-        const result = await sendEmail(lancamento.email, message.subject, message.body, session);
+        const result = await sendEmail(emailOf(lancamento), message.subject, message.body, session);
         const atualizados = await dbList<Record<string, unknown>>(key);
         const current = atualizados.find((item) => item.id === id) || lancamento;
         const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
