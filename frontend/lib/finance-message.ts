@@ -67,9 +67,11 @@ export function financeMessage(row: Record<string, unknown>, origin = "") {
   const barcode = text(row.boleto_codigo);
   const link = boletoUrl && boletoUrl.startsWith("http")
     ? boletoUrl
-    : pdfUrl
+    : id
+      ? `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`
+      : pdfUrl
       ? (pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`)
-      : (id ? `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}` : origin);
+      : origin;
   const category = financeCategory(row);
   const title = categoryTitle(category);
   const aluno = text(row.aluno || row.nome || "Aluno");
