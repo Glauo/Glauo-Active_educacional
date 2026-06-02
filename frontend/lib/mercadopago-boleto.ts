@@ -1,5 +1,6 @@
 import { dbGet, dbList, dbSet } from "@/lib/db";
 import { criarPagamentoBoleto, resolveIdentification } from "@/lib/criar-pagamento-boleto";
+import { findStudentForCharge, studentFinanceData } from "@/lib/student-finance";
 
 type Row = Record<string, unknown>;
 
@@ -121,25 +122,6 @@ function payerAddress(lancamento: Row, aluno: Row | null, sistema: Row | null) {
   };
 }
 
-function findStudent(students: Row[], lancamento: Row) {
-  const id = normalize(lancamento.aluno_id || lancamento.student_id || lancamento.id_aluno);
-  const login = normalize(lancamento.aluno_login || lancamento.login || lancamento.usuario);
-  const nome = normalize(lancamento.aluno || lancamento.nome || lancamento.pagador);
-  const email = normalize(lancamento.email || lancamento.aluno_email || lancamento.responsavel_email || lancamento.email_responsavel);
-  return students.find((student) => {
-    const ids = [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean);
-    const logins = [student.login, student.usuario, student.aluno_login, student.email].map(normalize).filter(Boolean);
-    const nomes = [student.nome, student.name, student.nome_completo, student.aluno].map(normalize).filter(Boolean);
-    const emails = [student.email, student.aluno_email, student.responsavel_email, student.email_responsavel].map(normalize).filter(Boolean);
-    return Boolean(
-      (id && ids.includes(id)) ||
-      (login && logins.includes(login)) ||
-      (email && emails.includes(email)) ||
-      (nome && nomes.some((studentName) => studentName === nome || (nome.length > 8 && (studentName.includes(nome) || nome.includes(studentName)))))
-    );
-  }) || null;
-}
-
 export function expirationDate(value: unknown) {
   const parsed = new Date(text(value));
   let date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -179,7 +161,8 @@ export async function createMercadoPagoBoleto(
     dbGet<Row>("sistema_config.json"),
     dbList<Row>("students.json"),
   ]);
-  const aluno = findStudent(students, lancamento);
+  const aluno = findStudentForCharge(students, lancamento);
+  const boletoBase = { ...lancamento, ...studentFinanceData(aluno) };
   const responsavel = asRow(aluno?.responsavel);
   const token = boletoToken(config);
   if (!token) {
@@ -207,7 +190,7 @@ export async function createMercadoPagoBoleto(
     lancamento.pagador ||
     "Aluno Active"
   );
-  const email = payerEmail(lancamento, aluno, config, nome, id);
+  const email = payerEmail(boletoBase, aluno, config, nome, id);
   if (!email) {
     return {
       ok: false,
@@ -230,15 +213,15 @@ export async function createMercadoPagoBoleto(
     responsavel.documento ||
     responsavel.cnpj ||
     aluno?.cnpj ||
-    lancamento.cpf ||
-    lancamento.cpf_aluno ||
-    lancamento.cpf_do_aluno ||
-    lancamento.aluno_cpf ||
-    lancamento.responsavel_cpf ||
-    lancamento.cpf_responsavel ||
-    lancamento.documento ||
-    lancamento.documento_pagador ||
-    lancamento.cnpj ||
+    boletoBase.cpf ||
+    boletoBase.cpf_aluno ||
+    boletoBase.cpf_do_aluno ||
+    boletoBase.aluno_cpf ||
+    boletoBase.responsavel_cpf ||
+    boletoBase.cpf_responsavel ||
+    boletoBase.documento ||
+    boletoBase.documento_pagador ||
+    boletoBase.cnpj ||
     config?.payer_document ||
     config?.cpf ||
     config?.cnpj ||
@@ -256,7 +239,7 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const address = payerAddress(lancamento, aluno, sistema);
+  const address = payerAddress(boletoBase, aluno, sistema);
   if (!address.zip_code) {
     return {
       ok: false,

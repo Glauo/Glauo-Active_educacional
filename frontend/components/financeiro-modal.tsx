@@ -114,6 +114,16 @@ function addMonths(dateStr: string, months: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function nextDueFromDay(dayValue: unknown) {
+  const day = Math.max(1, Math.min(28, Number.parseInt(text(dayValue)) || 0));
+  if (!day) return "";
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const due = new Date(today.getFullYear(), today.getMonth(), day, 12);
+  if (due <= today) due.setMonth(due.getMonth() + 1);
+  return due.toISOString().slice(0, 10);
+}
+
 function studentName(aluno: AlunoOption) {
   return text(aluno.nome || aluno.name || aluno.nome_completo || aluno.aluno || aluno.aluno_nome || aluno.login || aluno.usuario);
 }
@@ -156,6 +166,10 @@ function studentMonthlyValue(aluno?: AlunoOption) {
   return text(aluno?.valor_mensalidade || aluno?.mensalidade || aluno?.plano_valor);
 }
 
+function studentDueDate(aluno?: AlunoOption) {
+  return text(aluno?.vencimento) || nextDueFromDay(aluno?.dia_vencimento);
+}
+
 function boletoImportForm(aluno?: AlunoOption) {
   return {
     aluno_id: aluno ? studentIdentifier(aluno) : "",
@@ -165,7 +179,7 @@ function boletoImportForm(aluno?: AlunoOption) {
     aluno_telefone: aluno ? studentPhone(aluno) : "",
     descricao: "Boleto externo",
     valor: aluno ? studentMonthlyValue(aluno) : "",
-    vencimento: text(aluno?.vencimento),
+    vencimento: studentDueDate(aluno),
     categoria: "Mensalidade",
     enviar_whatsapp: true,
     enviar_email: true,
@@ -322,7 +336,7 @@ function LancamentoModal({
       return;
     }
     const valor = studentMonthlyValue(aluno);
-    const venc = text(aluno.vencimento) || form.vencimento;
+    const venc = studentDueDate(aluno) || form.vencimento;
     setForm((prev) => ({
       ...prev,
       aluno_id: studentIdentifier(aluno),
@@ -346,8 +360,12 @@ function LancamentoModal({
   }
 
   async function salvar() {
+    if (isRecebimento && alunos.length > 0 && !form.aluno_id) {
+      setErro("Selecione o aluno pelo cadastro. Os dados do boleto serao puxados automaticamente do cadastro do aluno.");
+      return;
+    }
     if (isRecebimento && !form.aluno.trim()) {
-      setErro("Selecione ou informe o aluno.");
+      setErro("Selecione o aluno.");
       return;
     }
     if (!form.vencimento) { setErro("Informe a data de vencimento."); return; }
@@ -419,8 +437,8 @@ function LancamentoModal({
       const msg = financeMessage(item, window.location.origin);
       links.push({
         label: text(item.parcela) || "Parcela",
-        whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
-        email: form.enviar_email ? mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body) : "",
+        whatsapp: form.enviar_whatsapp ? { phone: text(item.telefone || item.whatsapp || form.aluno_telefone), message: msg.body } : undefined,
+        email: form.enviar_email ? mailtoUrl(text(item.email || item.aluno_email || form.aluno_email), msg.subject, msg.body) : "",
       });
       setSavedLinks(links);
       onSaved();
@@ -480,8 +498,8 @@ function LancamentoModal({
         const msg = financeMessage(item, window.location.origin);
         links.push({
           label: isMensalidade ? "Mensalidade" : `Parcela ${parcelaTxt}`,
-          whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
-          email: form.enviar_email ? mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body) : "",
+          whatsapp: form.enviar_whatsapp ? { phone: text(item.telefone || item.whatsapp || form.aluno_telefone), message: msg.body } : undefined,
+          email: form.enviar_email ? mailtoUrl(text(item.email || item.aluno_email || form.aluno_email), msg.subject, msg.body) : "",
         });
       }
     }
@@ -536,23 +554,23 @@ function LancamentoModal({
                       </option>
                     ))}
                   </select>
-                  <div className="form-help">Ao selecionar, o sistema puxa nome, login, telefone, e-mail e mensalidade cadastrada.</div>
+                  <div className="form-help">Use sempre o cadastro do aluno. O boleto busca CPF, responsavel, telefone, e-mail e endereco desse cadastro.</div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Aluno selecionado</label>
-                  <input className="form-input" value={form.aluno} onChange={(e) => update("aluno", e.target.value)} placeholder="Nome do aluno" />
+                  <input className="form-input" value={form.aluno} onChange={(e) => update("aluno", e.target.value)} placeholder="Nome do aluno" readOnly={Boolean(alunoSelecionado)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Login do aluno</label>
-                  <input className="form-input" value={form.aluno_login} onChange={(e) => update("aluno_login", e.target.value)} placeholder="Opcional" />
+                  <input className="form-input" value={form.aluno_login} onChange={(e) => update("aluno_login", e.target.value)} placeholder="Opcional" readOnly={Boolean(alunoSelecionado)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">WhatsApp</label>
-                  <input className="form-input" value={form.aluno_telefone} onChange={(e) => update("aluno_telefone", e.target.value)} placeholder="Telefone do responsavel/aluno" />
+                  <input className="form-input" value={form.aluno_telefone} onChange={(e) => update("aluno_telefone", e.target.value)} placeholder="Telefone do responsavel/aluno" readOnly={Boolean(alunoSelecionado)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">E-mail</label>
-                  <input className="form-input" type="email" value={form.aluno_email} onChange={(e) => update("aluno_email", e.target.value)} placeholder="E-mail do responsavel/aluno" />
+                  <input className="form-input" type="email" value={form.aluno_email} onChange={(e) => update("aluno_email", e.target.value)} placeholder="E-mail do responsavel/aluno" readOnly={Boolean(alunoSelecionado)} />
                 </div>
               </>
             ) : (
@@ -652,7 +670,7 @@ function LancamentoModal({
 
           {alunoSelecionado && (
             <div className="alert alert-info" style={{ marginTop: 12 }}>
-              Aluno puxado automaticamente: {studentName(alunoSelecionado)} | Turma: {text(alunoSelecionado.turma || alunoSelecionado.classe) || "-"} | Mensalidade: {text(alunoSelecionado.valor_mensalidade) || "-"}
+              Cadastro do aluno vinculado: {studentName(alunoSelecionado)} | Turma: {text(alunoSelecionado.turma || alunoSelecionado.classe) || "-"} | Mensalidade: {text(alunoSelecionado.valor_mensalidade || alunoSelecionado.mensalidade || alunoSelecionado.plano_valor) || "-"} | WhatsApp: {studentPhone(alunoSelecionado) || "-"} | E-mail: {studentEmail(alunoSelecionado) || "-"}
             </div>
           )}
           {savedLinks.length > 0 && (
@@ -749,13 +767,17 @@ export function ImportarBoletoPdfBtn({
       aluno_email: studentEmail(aluno),
       aluno_telefone: studentPhone(aluno),
       valor: studentMonthlyValue(aluno) || prev.valor,
-      vencimento: text(aluno.vencimento) || prev.vencimento,
+      vencimento: studentDueDate(aluno) || prev.vencimento,
     }));
   }
 
   async function importar() {
     if (!arquivo) { setErro("Selecione o arquivo PDF do boleto."); return; }
-    if (!form.aluno.trim()) { setErro("Selecione ou informe o aluno."); return; }
+    if (alunosDisponiveis.length > 0 && !form.aluno_id) {
+      setErro("Selecione o aluno pelo cadastro antes de anexar o boleto.");
+      return;
+    }
+    if (!form.aluno.trim()) { setErro("Selecione o aluno."); return; }
 
     const payload = new FormData();
     payload.set("arquivo_pdf", arquivo);
@@ -813,23 +835,23 @@ export function ImportarBoletoPdfBtn({
                       </option>
                     ))}
                   </select>
-                  <div className="form-help">{alunosDisponiveis.length ? `${alunosDisponiveis.length} aluno(s) carregado(s) do cadastro.` : "Nenhum aluno carregado do cadastro. Os campos manuais continuam disponiveis."}</div>
+                  <div className="form-help">{alunosDisponiveis.length ? `${alunosDisponiveis.length} aluno(s) carregado(s) do cadastro. O boleto fica vinculado ao cadastro selecionado.` : "Nenhum aluno carregado do cadastro."}</div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Nome do aluno</label>
-                  <input className="form-input" value={form.aluno} onChange={(e) => update("aluno", e.target.value)} />
+                  <input className="form-input" value={form.aluno} onChange={(e) => update("aluno", e.target.value)} readOnly={Boolean(form.aluno_id)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Login</label>
-                  <input className="form-input" value={form.aluno_login} onChange={(e) => update("aluno_login", e.target.value)} />
+                  <input className="form-input" value={form.aluno_login} onChange={(e) => update("aluno_login", e.target.value)} readOnly={Boolean(form.aluno_id)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">WhatsApp</label>
-                  <input className="form-input" value={form.aluno_telefone} onChange={(e) => update("aluno_telefone", e.target.value)} />
+                  <input className="form-input" value={form.aluno_telefone} onChange={(e) => update("aluno_telefone", e.target.value)} readOnly={Boolean(form.aluno_id)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">E-mail</label>
-                  <input className="form-input" type="email" value={form.aluno_email} onChange={(e) => update("aluno_email", e.target.value)} />
+                  <input className="form-input" type="email" value={form.aluno_email} onChange={(e) => update("aluno_email", e.target.value)} readOnly={Boolean(form.aluno_id)} />
                 </div>
                 <div className="form-group form-group-span2">
                   <label className="form-label">Arquivo PDF do boleto *</label>

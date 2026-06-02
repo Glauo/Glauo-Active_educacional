@@ -223,6 +223,15 @@ async function sendWhatsAppAutomatico(phone: string, message: string) {
   return res.json().catch(() => ({})) as Promise<{ ok?: boolean; status?: string; error?: string }>;
 }
 
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="form-section-heading form-group-span2">
+      <div className="form-section-title">{title}</div>
+      {subtitle && <div className="form-section-subtitle">{subtitle}</div>}
+    </div>
+  );
+}
+
 function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: () => void; onSaved: () => void }) {
   const registroId = text(aluno?.id || aluno?.nome || aluno?.name);
   const isEdit = Boolean(registroId);
@@ -425,6 +434,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
 
         <div className="modal-body">
           <div className="form-grid">
+            <SectionHeading title="Dados do aluno" subtitle="Identificacao principal do cadastro." />
             <div className="form-group form-group-span2">
               <label className="form-label">Nome completo *</label>
               <input className="form-input" placeholder="Nome do aluno" value={form.nome} onChange={(e) => update("nome", e.target.value)} autoFocus />
@@ -441,6 +451,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
                 <option>Em atencao</option>
               </select>
             </div>
+            <SectionHeading title="Curso e turma" subtitle="A turma puxa modulo e livro quando essa informacao existir no cadastro da turma." />
             <div className="form-group">
               <label className="form-label">Turma</label>
               <select className="form-input" value={form.turma || "Sem Turma"} onChange={(e) => selecionarTurma(e.target.value)}>
@@ -577,6 +588,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
               <label className="form-label">Pais</label>
               <input className="form-input" value={form.pais} onChange={(e) => update("pais", e.target.value)} />
             </div>
+            <SectionHeading title="Responsavel financeiro" subtitle="Boletos, e-mails e WhatsApp usam estes dados como prioridade." />
             <div className="form-group">
               <label className="form-label">Responsavel</label>
               <input className="form-input" placeholder="Nome do responsavel" value={form.responsavel_nome} onChange={(e) => update("responsavel_nome", e.target.value)} />
@@ -601,6 +613,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
               <label className="form-label">E-mail do aluno</label>
               <input className="form-input" type="email" placeholder="Opcional" value={form.email} onChange={(e) => update("email", e.target.value)} />
             </div>
+            <SectionHeading title="Endereco do pagador" subtitle="Usado automaticamente na geracao de boleto Mercado Pago." />
             <div className="form-group">
               <label className="form-label">CEP</label>
               <input className="form-input" placeholder="00000-000" value={form.cep} onChange={(e) => update("cep", e.target.value)} />
@@ -629,6 +642,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
               <label className="form-label">Endereco completo / observacao de endereco</label>
               <input className="form-input" placeholder="Complemento livre do endereco antigo" value={form.endereco} onChange={(e) => update("endereco", e.target.value)} />
             </div>
+            <SectionHeading title="Cobranca escolar" subtitle="A mensalidade gera cobrancas automaticamente por ciclo de 6 meses." />
             <div className="form-group">
               <label className="form-label">Dia de vencimento</label>
               <input className="form-input" type="number" min="1" max="31" placeholder="Ex: 10" value={form.dia_vencimento} onChange={(e) => update("dia_vencimento", e.target.value)} />
@@ -645,6 +659,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
               <label className="form-label">Observacoes</label>
               <textarea className="form-input form-textarea" rows={3} value={form.observacoes} onChange={(e) => update("observacoes", e.target.value)} />
             </div>
+            <SectionHeading title="Acesso do aluno" subtitle="Credenciais para o portal do aluno e envio ao responsavel." />
             <>
                 <div className="form-group">
                   <label className="form-label">Login do aluno</label>

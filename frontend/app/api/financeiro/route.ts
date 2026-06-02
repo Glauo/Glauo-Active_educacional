@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email";
 import { isAdmin } from "@/lib/roles";
 import { financeMessage } from "@/lib/finance-message";
 import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
+import { enrichChargeWithStudent } from "@/lib/student-finance";
 
 function text(value: unknown) {
   return String(value || "").trim();
@@ -106,6 +107,12 @@ async function maybeGenerateMercadoPagoBoleto(
   };
 }
 
+async function enrichIfReceivable(tipo: unknown, data: Record<string, unknown>) {
+  if (tipo === "despesas") return data;
+  const students = await dbList<Record<string, unknown>>("students.json");
+  return enrichChargeWithStudent(data, students);
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
@@ -131,7 +138,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { tipo = "recebimentos", ...data } = body;
+    const { tipo = "recebimentos", ...rawData } = body;
+    const data = await enrichIfReceivable(tipo, rawData);
     const key = tipo === "despesas" ? "payables.json" : "receivables.json";
 
     const current = await dbList<Record<string, unknown>>(key);
@@ -140,8 +148,9 @@ export async function POST(req: NextRequest) {
 
     // Batch create (mensalidades mensais)
     if (Array.isArray(data.items) && (data.items as unknown[]).length > 0) {
+      const students = tipo === "despesas" ? [] : await dbList<Record<string, unknown>>("students.json");
       const novos = (data.items as Record<string, unknown>[]).map((item) => ({
-        ...item,
+        ...(tipo === "despesas" ? item : enrichChargeWithStudent(item, students)),
         id: text(item.id) || crypto.randomUUID(),
         created_at: new Date().toISOString(),
         created_by: session.pessoa || session.usuario,
@@ -156,7 +165,7 @@ export async function POST(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(data.boleto_pdf_mime) || "application/pdf",
     } : {};
-    const novo = {
+    const novo: Record<string, unknown> = {
       ...data,
       ...pdfUpdate,
       id,
@@ -218,7 +227,8 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
 
   try {
-    const { id, tipo = "recebimentos", ...updates } = await req.json();
+    const { id, tipo = "recebimentos", ...rawUpdates } = await req.json();
+    const updates = await enrichIfReceivable(tipo, rawUpdates);
     if (!id) return NextResponse.json({ error: "ID obrigatorio." }, { status: 400 });
 
     const key = tipo === "despesas" ? "payables.json" : "receivables.json";

@@ -1,4 +1,5 @@
 import { dbList, dbSet } from "./db";
+import { studentDisplayName, studentEmail, studentFinanceData, studentLogin, studentPhone } from "./student-finance";
 
 type Row = Record<string, unknown>;
 
@@ -48,24 +49,6 @@ function competencia(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function studentName(student: Row) {
-  return text(student.nome || student.name || student.aluno || student.login);
-}
-
-function studentLogin(student: Row) {
-  return text(student.login || student.usuario);
-}
-
-function studentPhone(student: Row) {
-  const responsavel = student.responsavel && typeof student.responsavel === "object" ? student.responsavel as Row : {};
-  return text(student.responsavel_telefone || responsavel.telefone || responsavel.celular || student.telefone || student.celular || student.whatsapp);
-}
-
-function studentEmail(student: Row) {
-  const responsavel = student.responsavel && typeof student.responsavel === "object" ? student.responsavel as Row : {};
-  return text(student.responsavel_email || responsavel.email || student.email || student.aluno_email);
-}
-
 function activeStudent(student: Row) {
   const status = lower(student.status || student.situacao || "ativo");
   return !status.includes("inativ") && !status.includes("cancel") && !status.includes("tranc");
@@ -94,7 +77,7 @@ function sameStudent(receivable: Row, student: Row) {
   const studentKeys = [
     text(student.id),
     studentLogin(student),
-    studentName(student),
+    studentDisplayName(student),
     text(student.cpf),
   ].map(lower).filter(Boolean);
   const receivableKeys = [
@@ -133,7 +116,7 @@ function shouldCreateRenewal(existingMonthly: Row[], today = new Date()) {
 function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}) {
   if (!activeStudent(student)) return [];
   const value = moneyValue(student.valor_mensalidade || student.mensalidade || student.plano_valor);
-  const aluno = studentName(student);
+  const aluno = studentDisplayName(student);
   if (!aluno || !value) return [];
 
   const existingMonthly = receivables.filter((item) => sameStudent(item, student) && isMonthly(item));
@@ -165,6 +148,7 @@ function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}
       telefone: studentPhone(student),
       whatsapp: studentPhone(student),
       email: studentEmail(student),
+      ...studentFinanceData(student),
       descricao: "Mensalidade",
       categoria: "Mensalidade",
       tipo_lancamento_detalhe: "Mensalidade",
