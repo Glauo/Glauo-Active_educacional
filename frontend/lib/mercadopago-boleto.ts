@@ -45,6 +45,14 @@ function firstPresent(...values: unknown[]) {
   return values.map(text).find(Boolean) || "";
 }
 
+function firstValidDocument(...values: unknown[]) {
+  for (const value of values) {
+    const document = digits(value);
+    if (document.length === 11 || document.length === 14) return document;
+  }
+  return "";
+}
+
 function slug(value: unknown) {
   return normalize(value).replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
 }
@@ -216,35 +224,35 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const documento = digits(
-    aluno?.cpf_aluno ||
-    aluno?.cpf_do_aluno ||
-    aluno?.cpf ||
-    aluno?.aluno_cpf ||
-    aluno?.responsavel_cpf ||
-    aluno?.cpf_responsavel ||
-    aluno?.documento ||
-    aluno?.documento_pagador ||
-    responsavel.cpf ||
-    responsavel.cpf_responsavel ||
-    responsavel.documento ||
-    responsavel.cnpj ||
-    aluno?.cnpj ||
-    lancamento.cpf ||
-    lancamento.cpf_aluno ||
-    lancamento.cpf_do_aluno ||
-    lancamento.aluno_cpf ||
-    lancamento.responsavel_cpf ||
-    lancamento.cpf_responsavel ||
-    lancamento.documento ||
-    lancamento.documento_pagador ||
-    lancamento.cnpj ||
-    config?.payer_document ||
-    config?.cpf ||
-    config?.cnpj ||
-    sistema?.cnpj ||
-    sistema?.cpf ||
-    process.env.ACTIVE_MERCADO_PAGO_PAYER_DOCUMENT ||
+  const documento = firstValidDocument(
+    aluno?.cpf_do_aluno,
+    aluno?.cpf_aluno,
+    aluno?.cpf,
+    aluno?.aluno_cpf,
+    aluno?.responsavel_cpf,
+    aluno?.cpf_responsavel,
+    aluno?.documento,
+    aluno?.documento_pagador,
+    responsavel.cpf,
+    responsavel.cpf_responsavel,
+    responsavel.documento,
+    responsavel.cnpj,
+    aluno?.cnpj,
+    lancamento.cpf,
+    lancamento.cpf_aluno,
+    lancamento.cpf_do_aluno,
+    lancamento.aluno_cpf,
+    lancamento.responsavel_cpf,
+    lancamento.cpf_responsavel,
+    lancamento.documento,
+    lancamento.documento_pagador,
+    lancamento.cnpj,
+    config?.payer_document,
+    config?.cpf,
+    config?.cnpj,
+    sistema?.cnpj,
+    sistema?.cpf,
+    process.env.ACTIVE_MERCADO_PAGO_PAYER_DOCUMENT,
     process.env.MERCADO_PAGO_PAYER_DOCUMENT
   );
   const identification = resolveIdentification(documento);
@@ -271,7 +279,6 @@ export async function createMercadoPagoBoleto(
     transactionAmount: amount,
     description: text(lancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
-    dateOfExpiration: expirationDate(lancamento.vencimento || lancamento.data_vencimento),
     notificationUrl,
     idempotencyKey: `active-boleto-${id}`,
     metadata: {
