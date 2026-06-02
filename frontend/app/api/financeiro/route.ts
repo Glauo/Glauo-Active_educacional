@@ -228,7 +228,6 @@ export async function PUT(req: NextRequest) {
 
   try {
     const { id, tipo = "recebimentos", ...rawUpdates } = await req.json();
-    const updates = await enrichIfReceivable(tipo, rawUpdates);
     if (!id) return NextResponse.json({ error: "ID obrigatorio." }, { status: 400 });
 
     const key = tipo === "despesas" ? "payables.json" : "receivables.json";
@@ -239,6 +238,7 @@ export async function PUT(req: NextRequest) {
     if (idx === -1) return NextResponse.json({ error: "Lancamento nao encontrado." }, { status: 404 });
 
     const before = { ...lancamentos[idx] };
+    const updates = await enrichIfReceivable(tipo, { ...before, ...rawUpdates });
     const wasPaid = isPaid(lancamentos[idx].status);
     const willBePaid = isPaid(updates.status);
     const isReversal = Boolean(updates.estorno);
