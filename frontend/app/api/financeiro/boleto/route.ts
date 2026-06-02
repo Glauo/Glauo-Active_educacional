@@ -24,6 +24,11 @@ function importedPdfUrl(lancamento: Row, origin: string) {
   return "";
 }
 
+function isMercadoPagoUrl(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
@@ -38,17 +43,17 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = new URL(req.url).origin;
-  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url);
+  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
   if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
 
   const externalPdf = text(lancamento.boleto_pdf_url);
-  if (externalPdf.startsWith("http")) return NextResponse.redirect(externalPdf);
-
-  const importedPdf = importedPdfUrl(lancamento, origin);
-  if (importedPdf) return NextResponse.redirect(importedPdf);
+  if (isMercadoPagoUrl(externalPdf)) return NextResponse.redirect(externalPdf);
 
   const generated = await createMercadoPagoBoleto(lancamento, id, origin);
   if (generated.ok) return NextResponse.redirect(generated.url);
+
+  const importedPdf = importedPdfUrl(lancamento, origin);
+  if (importedPdf && new URL(req.url).searchParams.get("importado") === "true") return NextResponse.redirect(importedPdf);
 
   return errorHtml(generated.title, generated.message, generated.detail);
 }
