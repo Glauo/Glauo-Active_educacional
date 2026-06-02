@@ -29,6 +29,28 @@ function moneyNumber(value: unknown) {
   return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : 0;
 }
 
+function monthlyCharge(row: Row) {
+  const label = normalize([
+    row.descricao,
+    row.categoria,
+    row.tipo,
+    row.tipo_lancamento_detalhe,
+    row.parcela,
+  ].join(" "));
+  return label.includes("mensal") || label.includes("taxa mensal");
+}
+
+function boletoAmount(lancamento: Row, boletoBase: Row) {
+  const cadastroAmount = moneyNumber(
+    boletoBase.valor_mensalidade_cadastro ||
+    boletoBase.valor_mensalidade ||
+    boletoBase.mensalidade ||
+    boletoBase.plano_valor
+  );
+  if (monthlyCharge(lancamento) && cadastroAmount > 0) return cadastroAmount;
+  return moneyNumber(lancamento.valor_parcela ?? lancamento.valor);
+}
+
 function digits(value: unknown) {
   return text(value).replace(/\D/g, "");
 }
@@ -173,9 +195,17 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const amount = moneyNumber(lancamento.valor_parcela ?? lancamento.valor);
+  const amount = boletoAmount(lancamento, boletoBase);
   if (!amount) {
     return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar boleto." };
+  }
+  if (amount < 5) {
+    return {
+      ok: false,
+      title: "Valor abaixo do minimo do Mercado Pago",
+      message: "O Mercado Pago nao gera boleto para valor abaixo de R$ 5,00. Ajuste o valor do lancamento antes de gerar o boleto.",
+      detail: `Valor atual: R$ ${amount.toFixed(2).replace(".", ",")}`,
+    };
   }
 
   const nome = text(
@@ -286,6 +316,12 @@ export async function createMercadoPagoBoleto(
   const recebimentos = await dbList<Row>("receivables.json");
   await dbSet("receivables.json", recebimentos.map((item) => text(item.id) === id ? {
     ...item,
+    ...(monthlyCharge(item) ? {
+      valor_original_lancamento: item.valor_original_lancamento || item.valor,
+      valor: amount,
+      valor_parcela: amount,
+      valor_sincronizado_cadastro: true,
+    } : {}),
     mercado_pago_payment_id: result.paymentId,
     mercado_pago_status: result.status,
     mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),

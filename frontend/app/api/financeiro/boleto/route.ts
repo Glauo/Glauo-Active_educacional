@@ -43,8 +43,11 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = new URL(req.url).origin;
-  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
-  if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
+  const mercadoPagoTicketUrl = text(lancamento.mercado_pago_ticket_url);
+  if (isMercadoPagoUrl(mercadoPagoTicketUrl)) return NextResponse.redirect(mercadoPagoTicketUrl);
+
+  const boletoUrl = text(lancamento.boleto_url);
+  if (isMercadoPagoUrl(boletoUrl)) return NextResponse.redirect(boletoUrl);
 
   const externalPdf = text(lancamento.boleto_pdf_url);
   if (isMercadoPagoUrl(externalPdf)) return NextResponse.redirect(externalPdf);

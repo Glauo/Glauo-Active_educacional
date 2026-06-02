@@ -67,6 +67,11 @@ function emailOf(data: Record<string, unknown>) {
   );
 }
 
+function isMercadoPagoUrl(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 function runNotification(task: Promise<unknown>, label: string) {
   void task.catch((err) => {
     console.error(`[financeiro notificacao ${label}]`, err);
@@ -87,7 +92,7 @@ async function maybeGenerateMercadoPagoBoleto(
   hasImportedPdf: boolean,
 ) {
   if (!wantsBoleto || hasImportedPdf) return { ok: true as const, lancamento };
-  if (text(lancamento.mercado_pago_ticket_url).startsWith("http")) return { ok: true as const, lancamento };
+  if (isMercadoPagoUrl(lancamento.mercado_pago_ticket_url)) return { ok: true as const, lancamento };
 
   const result = await createMercadoPagoBoleto(lancamento, id, origin);
   if (!result.ok) {
