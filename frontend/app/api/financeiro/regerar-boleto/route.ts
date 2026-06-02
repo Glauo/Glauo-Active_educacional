@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     if (mpResult.ok) {
       updatedMap.set(id, {
-        ...lanc,
+        ...(mpResult.lancamento || lanc),
         boleto_status: "Gerado MP",
         mercado_pago_ticket_url: mpResult.url,
         boleto_url: mpResult.url,
