@@ -16,6 +16,11 @@ function money(value: unknown) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function isMercadoPagoLink(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 function financeCategory(row: Record<string, unknown>) {
   const raw = normalize(row.tipo_lancamento_detalhe || row.categoria || row.descricao || row.boleto_status);
   if (raw.includes("matric")) return "matricula";
@@ -65,7 +70,7 @@ export function financeMessage(row: Record<string, unknown>, origin = "") {
   const boletoUrl = text(row.mercado_pago_ticket_url || row.boleto_url);
   const digitableLine = text(row.digitable_line || row.boleto_linha_digitavel);
   const barcode = text(row.boleto_codigo);
-  const link = boletoUrl && boletoUrl.startsWith("http")
+  const link = isMercadoPagoLink(boletoUrl)
     ? boletoUrl
     : id
       ? `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`
