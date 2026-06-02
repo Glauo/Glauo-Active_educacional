@@ -29,6 +29,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
   }
 
+  const mercadoPagoUrl = text(item.mercado_pago_ticket_url || item.boleto_url);
+  if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
+
+  const importado = req.nextUrl.searchParams.get("importado") === "true";
+  if (!importado) {
+    return NextResponse.redirect(new URL(`/api/financeiro/boleto?id=${encodeURIComponent(id)}`, req.url));
+  }
+
   const b64 = text(item.boleto_pdf_b64);
   if (b64) {
     const buffer = Buffer.from(b64, "base64");

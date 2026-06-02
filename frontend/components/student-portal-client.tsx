@@ -77,8 +77,10 @@ function isOpenInvoice(row: Row) {
 
 function boletoHref(row: Row) {
   const id = text(row.id);
+  const mercadoPago = text(row.mercado_pago_ticket_url || row.boleto_url);
+  if (mercadoPago.startsWith("http")) return mercadoPago;
+  if (id && text(row.boleto_status || row.gerar_boleto || row.boleto_pdf_url)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
   if (text(row.boleto_pdf_url)) return text(row.boleto_pdf_url);
-  if (id && text(row.boleto_status || row.gerar_boleto)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
   return "";
 }
 

@@ -20,7 +20,11 @@ function asRow(value: unknown): Row {
 }
 
 function moneyNumber(value: unknown) {
-  const n = parseFloat(String(value || "0").replace(/[^\d.,-]/g, "").replace(",", "."));
+  const raw = String(value || "0").replace(/[^\d.,-]/g, "");
+  const normalized = raw.includes(",")
+    ? raw.replace(/\./g, "").replace(",", ".")
+    : raw;
+  const n = parseFloat(normalized);
   return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : 0;
 }
 
@@ -41,6 +45,10 @@ function firstPresent(...values: unknown[]) {
   return values.map(text).find(Boolean) || "";
 }
 
+function slug(value: unknown) {
+  return normalize(value).replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
+}
+
 function boletoToken(config: Row | null) {
   return text(
     process.env.ACTIVE_MERCADO_PAGO_ACCESS_TOKEN ||
@@ -52,13 +60,9 @@ function boletoToken(config: Row | null) {
   );
 }
 
-function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null) {
+function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null, payerName: string, id: string) {
   const responsavel = asRow(aluno?.responsavel);
-  return text(
-    lancamento.email ||
-    lancamento.aluno_email ||
-    lancamento.responsavel_email ||
-    lancamento.email_responsavel ||
+  const found = text(
     aluno?.responsavel_email ||
     aluno?.email_responsavel ||
     aluno?.emailResponsavel ||
@@ -67,15 +71,33 @@ function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null) {
     responsavel.emailResponsavel ||
     aluno?.aluno_email ||
     aluno?.email ||
+    lancamento.email ||
+    lancamento.aluno_email ||
+    lancamento.responsavel_email ||
+    lancamento.email_responsavel ||
     config?.payer_email ||
     process.env.ACTIVE_MERCADO_PAGO_PAYER_EMAIL ||
     process.env.MERCADO_PAGO_PAYER_EMAIL
   );
+  if (found) return found;
+  return `aluno.${slug(payerName) || id.slice(0, 8)}@ativoeducacional.tech`;
 }
 
 function splitAddress(value: unknown) {
+  const row = asRow(value);
+  if (Object.keys(row).length > 0) {
+    return {
+      zip_code: firstPresent(row.cep, row.zip_code, row.zipCode, row.postal_code),
+      street_name: firstPresent(row.rua, row.logradouro, row.endereco, row.street, row.street_name),
+      street_number: firstPresent(row.numero, row.number, row.street_number),
+      neighborhood: firstPresent(row.bairro, row.neighborhood, row.district),
+      city: firstPresent(row.cidade, row.city),
+      federal_unit: firstPresent(row.estado, row.uf, row.federal_unit, row.state),
+    };
+  }
   const parts = text(value).split(",").map((item) => item.trim()).filter(Boolean);
   return {
+    zip_code: "",
     street_name: parts[0] || "",
     street_number: parts[1] || "",
     neighborhood: parts[2] || "",
@@ -85,17 +107,17 @@ function splitAddress(value: unknown) {
 
 function payerAddress(lancamento: Row, aluno: Row | null, sistema: Row | null) {
   const responsavel = asRow(aluno?.responsavel);
-  const parsedLancamento = splitAddress(lancamento.endereco || lancamento.address);
-  const parsedAluno = splitAddress(aluno?.endereco || aluno?.address);
-  const parsedResponsavel = splitAddress(responsavel.endereco || responsavel.address);
-  const parsedSistema = splitAddress(sistema?.endereco || sistema?.address);
+  const parsedLancamento = splitAddress(lancamento.endereco || lancamento.address || lancamento.endereco_completo);
+  const parsedAluno = splitAddress(aluno?.endereco || aluno?.address || aluno?.endereco_completo);
+  const parsedResponsavel = splitAddress(responsavel.endereco || responsavel.address || responsavel.endereco_completo);
+  const parsedSistema = splitAddress(sistema?.endereco || sistema?.address || sistema?.endereco_completo);
   return {
-    zip_code: digits(firstPresent(lancamento.cep, lancamento.zip_code, aluno?.cep, aluno?.zip_code, responsavel.cep, responsavel.zip_code, sistema?.cep, sistema?.zip_code)),
-    street_name: firstPresent(lancamento.rua, lancamento.street_name, parsedLancamento.street_name, aluno?.rua, aluno?.street_name, parsedAluno.street_name, responsavel.rua, responsavel.street_name, parsedResponsavel.street_name, sistema?.rua, sistema?.street_name, parsedSistema.street_name, "Rua nao informada"),
-    street_number: firstPresent(lancamento.numero, lancamento.number, lancamento.street_number, parsedLancamento.street_number, aluno?.numero, aluno?.number, aluno?.street_number, parsedAluno.street_number, responsavel.numero, responsavel.number, responsavel.street_number, parsedResponsavel.street_number, sistema?.numero, sistema?.street_number, parsedSistema.street_number, "S/N"),
-    neighborhood: firstPresent(lancamento.bairro, lancamento.neighborhood, parsedLancamento.neighborhood, aluno?.bairro, aluno?.neighborhood, parsedAluno.neighborhood, responsavel.bairro, responsavel.neighborhood, parsedResponsavel.neighborhood, sistema?.bairro, sistema?.neighborhood, parsedSistema.neighborhood, "Centro"),
-    city: firstPresent(lancamento.cidade, lancamento.city, parsedLancamento.city, aluno?.cidade, aluno?.city, parsedAluno.city, responsavel.cidade, responsavel.city, parsedResponsavel.city, sistema?.cidade, sistema?.city, "Sao Paulo"),
-    federal_unit: firstPresent(lancamento.estado, lancamento.uf, lancamento.federal_unit, aluno?.estado, aluno?.uf, aluno?.federal_unit, responsavel.estado, responsavel.uf, responsavel.federal_unit, sistema?.estado, sistema?.uf, sistema?.federal_unit, "SP").slice(0, 2).toUpperCase(),
+    zip_code: digits(firstPresent(aluno?.cep, aluno?.zip_code, aluno?.postal_code, parsedAluno.zip_code, responsavel.cep, responsavel.zip_code, responsavel.postal_code, parsedResponsavel.zip_code, lancamento.cep, lancamento.zip_code, lancamento.postal_code, parsedLancamento.zip_code, sistema?.cep, sistema?.zip_code, sistema?.postal_code, parsedSistema.zip_code)),
+    street_name: firstPresent(aluno?.rua, aluno?.logradouro, aluno?.street_name, parsedAluno.street_name, responsavel.rua, responsavel.logradouro, responsavel.street_name, parsedResponsavel.street_name, lancamento.rua, lancamento.logradouro, lancamento.street_name, parsedLancamento.street_name, sistema?.rua, sistema?.logradouro, sistema?.street_name, parsedSistema.street_name, "Rua nao informada"),
+    street_number: firstPresent(aluno?.numero, aluno?.number, aluno?.street_number, parsedAluno.street_number, responsavel.numero, responsavel.number, responsavel.street_number, parsedResponsavel.street_number, lancamento.numero, lancamento.number, lancamento.street_number, parsedLancamento.street_number, sistema?.numero, sistema?.number, sistema?.street_number, parsedSistema.street_number, "S/N"),
+    neighborhood: firstPresent(aluno?.bairro, aluno?.neighborhood, parsedAluno.neighborhood, responsavel.bairro, responsavel.neighborhood, parsedResponsavel.neighborhood, lancamento.bairro, lancamento.neighborhood, parsedLancamento.neighborhood, sistema?.bairro, sistema?.neighborhood, parsedSistema.neighborhood, "Centro"),
+    city: firstPresent(aluno?.cidade, aluno?.city, parsedAluno.city, responsavel.cidade, responsavel.city, parsedResponsavel.city, lancamento.cidade, lancamento.city, parsedLancamento.city, sistema?.cidade, sistema?.city, parsedSistema.city, "Sao Paulo"),
+    federal_unit: firstPresent(aluno?.estado, aluno?.uf, aluno?.federal_unit, parsedAluno.federal_unit, responsavel.estado, responsavel.uf, responsavel.federal_unit, parsedResponsavel.federal_unit, lancamento.estado, lancamento.uf, lancamento.federal_unit, parsedLancamento.federal_unit, sistema?.estado, sistema?.uf, sistema?.federal_unit, parsedSistema.federal_unit, "SP").slice(0, 2).toUpperCase(),
   };
 }
 
@@ -103,14 +125,17 @@ function findStudent(students: Row[], lancamento: Row) {
   const id = normalize(lancamento.aluno_id || lancamento.student_id || lancamento.id_aluno);
   const login = normalize(lancamento.aluno_login || lancamento.login || lancamento.usuario);
   const nome = normalize(lancamento.aluno || lancamento.nome || lancamento.pagador);
+  const email = normalize(lancamento.email || lancamento.aluno_email || lancamento.responsavel_email || lancamento.email_responsavel);
   return students.find((student) => {
     const ids = [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean);
-    const logins = [student.login, student.usuario, student.aluno_login].map(normalize).filter(Boolean);
+    const logins = [student.login, student.usuario, student.aluno_login, student.email].map(normalize).filter(Boolean);
     const nomes = [student.nome, student.name, student.nome_completo, student.aluno].map(normalize).filter(Boolean);
+    const emails = [student.email, student.aluno_email, student.responsavel_email, student.email_responsavel].map(normalize).filter(Boolean);
     return Boolean(
       (id && ids.includes(id)) ||
       (login && logins.includes(login)) ||
-      (nome && nomes.includes(nome))
+      (email && emails.includes(email)) ||
+      (nome && nomes.some((studentName) => studentName === nome || (nome.length > 8 && (studentName.includes(nome) || nome.includes(studentName)))))
     );
   }) || null;
 }
@@ -170,7 +195,19 @@ export async function createMercadoPagoBoleto(
     return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar boleto." };
   }
 
-  const email = payerEmail(lancamento, aluno, config);
+  const nome = text(
+    responsavel.nome ||
+    responsavel.name ||
+    aluno?.responsavel_nome ||
+    aluno?.responsavel_financeiro ||
+    aluno?.nome ||
+    aluno?.name ||
+    lancamento.aluno ||
+    lancamento.nome ||
+    lancamento.pagador ||
+    "Aluno Active"
+  );
+  const email = payerEmail(lancamento, aluno, config, nome, id);
   if (!email) {
     return {
       ok: false,
@@ -179,17 +216,28 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const nome = text(lancamento.aluno || lancamento.nome || lancamento.pagador || "Aluno Active");
   const documento = digits(
-    lancamento.cpf ||
-    lancamento.aluno_cpf ||
-    lancamento.responsavel_cpf ||
+    aluno?.cpf_aluno ||
+    aluno?.cpf_do_aluno ||
     aluno?.cpf ||
     aluno?.aluno_cpf ||
     aluno?.responsavel_cpf ||
+    aluno?.cpf_responsavel ||
+    aluno?.documento ||
+    aluno?.documento_pagador ||
     responsavel.cpf ||
+    responsavel.cpf_responsavel ||
+    responsavel.documento ||
     responsavel.cnpj ||
     aluno?.cnpj ||
+    lancamento.cpf ||
+    lancamento.cpf_aluno ||
+    lancamento.cpf_do_aluno ||
+    lancamento.aluno_cpf ||
+    lancamento.responsavel_cpf ||
+    lancamento.cpf_responsavel ||
+    lancamento.documento ||
+    lancamento.documento_pagador ||
     lancamento.cnpj ||
     config?.payer_document ||
     config?.cpf ||
@@ -259,7 +307,12 @@ export async function createMercadoPagoBoleto(
     mercado_pago_status: result.status,
     mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
     mercado_pago_ticket_url: result.pdfUrl,
+    boleto_url: result.pdfUrl,
     boleto_pdf_url: result.pdfUrl,
+    boleto_pdf_public_url: "",
+    boleto_pdf_b64: "",
+    boleto_pdf_mime: "",
+    boleto_pdf_nome: "",
     boleto_linha_digitavel: result.linhaDigitavel,
     boleto_status: "Mercado Pago",
     boleto_codigo: result.paymentId || text(item.boleto_codigo),
@@ -275,7 +328,12 @@ export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<Me
     ...lancamento,
     mercado_pago_payment_id: result.paymentId,
     mercado_pago_ticket_url: result.url,
+    boleto_url: result.url,
     boleto_pdf_url: result.url,
+    boleto_pdf_public_url: "",
+    boleto_pdf_b64: "",
+    boleto_pdf_mime: "",
+    boleto_pdf_nome: "",
     boleto_linha_digitavel: result.linha,
     boleto_status: "Mercado Pago",
     boleto_codigo: result.paymentId,

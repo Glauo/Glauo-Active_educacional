@@ -169,6 +169,7 @@ function LegacyAutoWhatsAppButton({ phone, message, label = "WhatsApp" }: { phon
 function boletoPdfHref(lancamento: Lancamento) {
   const mercadoPago = String(lancamento.mercado_pago_ticket_url || "").trim();
   if (mercadoPago.startsWith("http")) return mercadoPago;
+  if (lancamento.id) return `/api/financeiro/boleto?id=${encodeURIComponent(String(lancamento.id))}`;
   if (lancamento.boleto_pdf_b64 && lancamento.id) return `/api/financeiro/boleto-pdf?id=${encodeURIComponent(String(lancamento.id))}`;
   return String(lancamento.boleto_pdf_url || "");
 }
@@ -229,7 +230,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
     setSending(true);
     try {
       let current: Lancamento = lancamento;
-      if (!String(current.mercado_pago_ticket_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim()) {
+      if (!String(current.mercado_pago_ticket_url || "").trim()) {
         const res = await fetch("/api/financeiro", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -338,7 +339,7 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
 
   return (
     <>
-      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{String(lancamento.mercado_pago_ticket_url || "").startsWith("http") ? "Abrir boleto" : "Abrir PDF"}</a>}
+      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">Abrir boleto</a>}
       <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar boleto MP"}</button>
       <BoletoWhatsAppButton lancamento={lancamento} />
     </>
