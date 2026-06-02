@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { sendEmail } from "@/lib/email";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 function text(v: unknown) { return String(v || "").trim(); }
 
@@ -18,12 +18,13 @@ export async function POST(req: NextRequest) {
   };
 
   const results: Record<string, string> = {};
+  const manual: Record<string, string> = {};
 
   if (body.canal === "whatsapp" || body.canal === "ambos") {
     const telefone = text(body.telefone);
     if (telefone) {
-      const r = await sendWhatsApp(telefone, body.mensagem, session);
-      results.whatsapp = r.status;
+      manual.whatsapp = manualWhatsAppUrl(telefone, body.mensagem);
+      results.whatsapp = "link manual gerado";
     } else {
       results.whatsapp = "sem telefone cadastrado";
     }
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   const allOk = Object.values(results).some((s) =>
-    /enviado|enviada|ok|success|sent|queued|accepted|250/i.test(s)
+    /enviado|enviada|ok|success|sent|queued|accepted|250|manual gerado/i.test(s)
   );
-  return NextResponse.json({ ok: allOk, results });
+  return NextResponse.json({ ok: allOk, results, manual });
 }

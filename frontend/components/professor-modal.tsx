@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ModalPortal } from "@/components/modal-portal";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type ProfessorData = {
   id?: string;
@@ -92,7 +93,7 @@ function text(value: unknown) {
 }
 
 function whatsappUrl(phone: string, message: string) {
-  return "";
+  return manualWhatsAppUrl(phone, message);
 }
 
 function accessMessage(form: Form) {
@@ -109,15 +110,6 @@ function accessMessage(form: Form) {
 
 function mailtoUrl(email: string, form: Form) {
   return `mailto:${email}?subject=${encodeURIComponent("Acesso ao painel do professor")}&body=${encodeURIComponent(accessMessage(form))}`;
-}
-
-async function sendWhatsAppAutomatico(phone: string, message: string) {
-  const res = await fetch("/api/whatsapp/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ telefone: phone, mensagem: message }),
-  });
-  return res.json().catch(() => ({})) as Promise<{ ok?: boolean; status?: string; error?: string }>;
 }
 
 function fromProf(p?: ProfessorData): Form {
@@ -221,13 +213,15 @@ function ProfessorModal({ professor, onClose, onSaved }: { professor?: Professor
     const nextForm = { ...form, login: payload.login, senha: payload.senha };
     setSendWhatsappLink("");
     if (form.celular) {
-      const result = await sendWhatsAppAutomatico(form.celular, accessMessage(nextForm));
-      setSendFeedback(result.ok ? "Professor salvo. Login e senha enviados automaticamente por WhatsApp." : `Professor salvo. WhatsApp nao enviado: ${result.status || result.error || "verifique a WAPI"}.`);
+      setSendWhatsappLink(whatsappUrl(form.celular, accessMessage(nextForm)));
+      setSendFeedback("Professor salvo. Abra o WhatsApp manual para enviar login e senha.");
     } else {
-      setSendFeedback("Professor salvo. Cadastre um WhatsApp para enviar o acesso automaticamente.");
+      setSendFeedback("Professor salvo. Cadastre um WhatsApp para gerar o envio manual do acesso.");
     }
     setTimeout(() => onSaved(), 900);
   }
+
+  const accessWhatsappHref = form.login && form.senha && form.celular ? whatsappUrl(form.celular, accessMessage(form)) : "";
 
   return (
     <ModalPortal>
@@ -293,21 +287,15 @@ function ProfessorModal({ professor, onClose, onSaved }: { professor?: Professor
                 <button className="btn btn-secondary btn-sm" type="button" onClick={preencherAcessoAutomatico}>
                   Gerar login/senha automatico
                 </button>
-                <button
-                  type="button"
-                  className={`btn btn-secondary btn-sm${!form.login || !form.senha || !form.celular ? " disabled" : ""}`}
-                  onClick={async () => {
-                    if (!form.login || !form.senha || !form.celular) return;
-                    setSaving(true);
-                    const result = await sendWhatsAppAutomatico(form.celular, accessMessage(form));
-                    setSaving(false);
-                    setSendFeedback(result.ok ? "Login e senha enviados automaticamente por WhatsApp." : `WhatsApp nao enviado: ${result.status || result.error || "verifique a WAPI"}.`);
-                    setSendWhatsappLink("");
-                  }}
-                  disabled={!form.login || !form.senha || !form.celular || saving}
+                <a
+                  className={`btn btn-secondary btn-sm${!accessWhatsappHref ? " disabled" : ""}`}
+                  href={accessWhatsappHref || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => accessWhatsappHref && setSendFeedback("WhatsApp manual aberto com a mensagem preparada.")}
                 >
-                  {saving ? "Enviando..." : "Enviar por WhatsApp"}
-                </button>
+                  Abrir WhatsApp manual
+                </a>
                 <a
                   className={`btn btn-secondary btn-sm${!form.login || !form.senha || !form.email ? " disabled" : ""}`}
                   href={form.login && form.senha && form.email ? mailtoUrl(form.email, form) : "#"}
@@ -315,7 +303,8 @@ function ProfessorModal({ professor, onClose, onSaved }: { professor?: Professor
                   Enviar por e-mail
                 </a>
               </div>
-              <div className="form-help">{sendFeedback || "Ao salvar, o sistema envia automaticamente o WhatsApp pela WAPI."}</div>
+              <div className="form-help">{sendFeedback || "Ao salvar, o sistema gera um link para envio manual pelo WhatsApp."}</div>
+              {sendWhatsappLink && <a className="btn btn-secondary btn-sm" href={sendWhatsappLink} target="_blank" rel="noreferrer" style={{ marginTop: 8 }}>Abrir WhatsApp preparado</a>}
             </div>
             <div className="form-group">
               <label className="form-label">Tipo de contrato</label>

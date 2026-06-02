@@ -6,6 +6,7 @@ import { HomeworkSubmitForm, MuralConfirmButton } from "@/components/school-modu
 import { tagBadge, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
 import { StudentLogoutBtn } from "@/components/student-logout-btn";
 import { vipPackageStats } from "@/lib/course-modules";
+import { boletoAccessUrl } from "@/lib/finance-boleto-links";
 
 type Row = Record<string, unknown>;
 
@@ -76,10 +77,7 @@ function isOpenInvoice(row: Row) {
 }
 
 function boletoHref(row: Row) {
-  const id = text(row.id);
-  if (text(row.boleto_pdf_url)) return text(row.boleto_pdf_url);
-  if (id && text(row.boleto_status || row.gerar_boleto)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
-  return "";
+  return boletoAccessUrl(row);
 }
 
 function libraryHref(row: Row, tipo: "livros" | "materiais" | "videos") {

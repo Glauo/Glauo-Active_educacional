@@ -3,7 +3,6 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { financeMessage } from "@/lib/finance-message";
 
@@ -98,18 +97,6 @@ export async function POST(req: NextRequest) {
     await dbSet("receivables.json", [...recebimentos, novo]);
 
     const origin = new URL(req.url).origin;
-    if (text(form.get("enviar_whatsapp")) === "true") {
-      runNotification((async () => {
-        const message = financeMessage(novo, origin);
-        const result = await sendWhatsApp(novo.telefone || novo.whatsapp, message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>("receivables.json");
-        const current = atualizados.find((item) => item.id === id) || novo;
-        await dbSet("receivables.json", atualizados.map((item) => item.id === id ? {
-          ...item,
-          notification_status: { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status },
-        } : item));
-      })(), "whatsapp");
-    }
     if (text(form.get("enviar_email")) === "true") {
       runNotification((async () => {
         const message = financeMessage(novo, origin);

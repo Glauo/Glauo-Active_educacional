@@ -1,4 +1,5 @@
 import { polishPortugueseText } from "./portuguese-text";
+import { boletoAccessUrl } from "./finance-boleto-links";
 
 function text(value: unknown) {
   return String(value || "").trim();
@@ -60,20 +61,9 @@ function introFor(category: string) {
 }
 
 export function financeMessage(row: Record<string, unknown>, origin = "") {
-  const id = text(row.id);
-  const pdfUrl = text(row.boleto_pdf_url || row.boleto_pdf_public_url);
-  const boletoUrl = text(row.boleto_url);
   const digitableLine = text(row.digitable_line || row.boleto_linha_digitavel);
   const barcode = text(row.barcode || row.boleto_codigo);
-  
-  let link = "";
-  if (boletoUrl && boletoUrl.startsWith("http")) {
-    link = boletoUrl;
-  } else if (pdfUrl) {
-    link = pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`;
-  } else if (id) {
-    link = `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
-  }
+  const link = boletoAccessUrl(row, origin);
 
   const category = financeCategory(row);
   const title = categoryTitle(category);

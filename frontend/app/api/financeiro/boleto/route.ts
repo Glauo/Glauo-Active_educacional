@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { criarBoleteMercadoPago } from "@/lib/mercadopago";
+import { realBoletoTicketUrl } from "@/lib/finance-boleto-links";
 
 type Row = Record<string, unknown>;
 
@@ -126,7 +127,7 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = new URL(req.url).origin;
-  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
+  const mercadoPagoUrl = realBoletoTicketUrl(lancamento);
   if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
 
   const pixUrl = text(lancamento.pix_url);

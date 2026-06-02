@@ -35,7 +35,7 @@ function webhookUrl() {
 }
 
 function precisaRegerar(r: Row) {
-  const boletoUrl = text(r.boleto_url);
+  const boletoUrl = text(r.mercado_pago_ticket_url || r.boleto_url);
   const status = text(r.boleto_status);
   const codigo = text(r.boleto_codigo);
   return (
@@ -134,6 +134,7 @@ export async function GET(req: NextRequest) {
         updatedMap.set(id, {
           ...lanc,
           boleto_status: "Gerado MP",
+          mercado_pago_ticket_url: mpResult.boleto_url,
           boleto_url: mpResult.boleto_url,
           boleto_codigo: mpResult.barcode || "",
           boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",

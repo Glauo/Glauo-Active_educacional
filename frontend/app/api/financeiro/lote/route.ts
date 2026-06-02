@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
       status: "Boleto gerado",
       // Dados reais do Mercado Pago
       boleto_status: "Gerado MP",
+      mercado_pago_ticket_url: mpResult.boleto_url,
       boleto_url: mpResult.boleto_url,
       boleto_codigo: mpResult.barcode || "",
       boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",

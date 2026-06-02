@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { financeMessage } from "@/lib/finance-message";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type LancamentoData = {
   id?: string;
@@ -167,14 +168,14 @@ function boletoImportForm(aluno?: AlunoOption) {
     valor: aluno ? studentMonthlyValue(aluno) : "",
     vencimento: text(aluno?.vencimento),
     categoria: "Mensalidade",
-    enviar_whatsapp: true,
+    enviar_whatsapp: false,
     enviar_email: true,
     observacoes: "",
   };
 }
 
 function whatsappUrl(phone: unknown, message: string) {
-  return "";
+  return manualWhatsAppUrl(phone, message);
 }
 
 function mailtoUrl(email: string, subject: string, body: string) {
@@ -189,25 +190,6 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
   } finally {
     window.clearTimeout(timer);
   }
-}
-
-function boletoMessage(lancamento: LancamentoData, origin = "") {
-  const id = text(lancamento.id);
-  const pdfUrl = text(lancamento.boleto_pdf_url);
-  const link = pdfUrl
-    ? (pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`)
-    : (id ? `${origin}/api/financeiro/boleto?id=${id}` : origin);
-  return [
-    "Olá! Seu boleto/fatura da Active Educacional foi salvo.",
-    "",
-    `Aluno: ${text(lancamento.aluno || lancamento.nome)}`,
-    `Referência: ${text(lancamento.descricao)}`,
-    `Parcela: ${text(lancamento.parcela) || "1"}`,
-    `Valor: ${formatBRL(parseMoney(lancamento.valor_parcela || lancamento.valor))}`,
-    `Vencimento: ${text(lancamento.vencimento || lancamento.data_vencimento)}`,
-    "",
-    `Acesse o boleto: ${link}`,
-  ].join("\n");
 }
 
 function baseForm(lancamento?: LancamentoData, tipoInicial?: "recebimentos" | "despesas"): Form {
@@ -229,7 +211,7 @@ function baseForm(lancamento?: LancamentoData, tipoInicial?: "recebimentos" | "d
     vencimento: text(lancamento?.vencimento || lancamento?.data_vencimento) || hoje(),
     status: text(lancamento?.status || "Pendente"),
     gerar_boleto: Boolean(lancamento?.boleto_pdf_url || lancamento?.boleto_status),
-    enviar_whatsapp: true,
+    enviar_whatsapp: false,
     enviar_email: true,
     observacoes: text(lancamento?.observacoes),
   };
@@ -381,7 +363,7 @@ function LancamentoModal({
       const msg = financeMessage(item, window.location.origin);
       links.push({
         label: text(item.parcela) || "Parcela",
-        whatsapp: "",
+        whatsapp: form.enviar_whatsapp ? whatsappUrl(text(item.telefone || item.whatsapp || form.aluno_telefone), msg.body) : "",
         email: mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body),
       });
       setSavedLinks(links);
@@ -441,7 +423,7 @@ function LancamentoModal({
         const msg = financeMessage(item, window.location.origin);
         links.push({
           label: isMensalidade ? "Mensalidade" : `Parcela ${parcelaTxt}`,
-          whatsapp: "",
+          whatsapp: form.enviar_whatsapp ? whatsappUrl(text(item.telefone || item.whatsapp || form.aluno_telefone), msg.body) : "",
           email: form.enviar_email ? mailtoUrl(text(item.email || form.aluno_email), msg.subject, msg.body) : "",
         });
       }
@@ -591,7 +573,7 @@ function LancamentoModal({
                   />
                   {boletoPdf && (
                     <div className="form-help" style={{ color: "var(--green-700)" }}>
-                      Arquivo selecionado: {boletoPdf.name} — sera enviado por WhatsApp/e-mail e disponibilizado no painel do aluno.
+                      Arquivo selecionado: {boletoPdf.name} — sera disponibilizado no painel do aluno e podera gerar envio manual por WhatsApp/e-mail.
                     </div>
                   )}
                 </div>
@@ -599,7 +581,7 @@ function LancamentoModal({
                   <label className="form-label">Boleto e envio</label>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <label className="checkbox-row"><input type="checkbox" checked={form.gerar_boleto} onChange={(e) => update("gerar_boleto", e.target.checked)} /> Gerar boleto/fatura no sistema</label>
-                    <label className="checkbox-row"><input type="checkbox" checked={form.enviar_whatsapp} onChange={(e) => update("enviar_whatsapp", e.target.checked)} /> Enviar por WhatsApp ao salvar</label>
+                    <label className="checkbox-row"><input type="checkbox" checked={form.enviar_whatsapp} onChange={(e) => update("enviar_whatsapp", e.target.checked)} /> Gerar link manual de WhatsApp</label>
                     <label className="checkbox-row"><input type="checkbox" checked={form.enviar_email} onChange={(e) => update("enviar_email", e.target.checked)} /> Enviar por e-mail ao salvar</label>
                   </div>
                 </div>
@@ -622,6 +604,7 @@ function LancamentoModal({
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {savedLinks.map((link, index) => (
                   <span key={`${link.label}-${index}`} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {link.whatsapp && <a className="btn btn-secondary btn-sm" href={link.whatsapp} target="_blank" rel="noreferrer">WhatsApp {link.label}</a>}
                     {link.email && <a className="btn btn-secondary btn-sm" href={link.email}>E-mail {link.label}</a>}
                   </span>
                 ))}
@@ -732,7 +715,7 @@ export function ImportarBoletoPdfBtn({
       const item = data.lancamento as LancamentoData;
       const msg = financeMessage(item, window.location.origin);
       setLinks({
-        whatsapp: "",
+        whatsapp: form.enviar_whatsapp ? whatsappUrl(text(item.telefone || item.whatsapp || form.aluno_telefone), msg.body) : "",
         email: form.enviar_email ? mailtoUrl(text(form.aluno_email || item.email), msg.subject, msg.body) : "",
       });
       router.refresh();
@@ -755,7 +738,7 @@ export function ImportarBoletoPdfBtn({
             <div className="modal-header">
               <div>
                 <div className="modal-title">Importar boleto em PDF para aluno</div>
-                <div className="modal-subtitle">Selecione o aluno, anexe o PDF e envie por WhatsApp/e-mail ao salvar</div>
+                <div className="modal-subtitle">Selecione o aluno, anexe o PDF e gere links manuais de envio</div>
               </div>
               <button className="modal-close" onClick={() => setOpen(false)}>
                 <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
@@ -817,7 +800,7 @@ export function ImportarBoletoPdfBtn({
                 <div className="form-group form-group-span2">
                   <label className="form-label">Envio</label>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    <label className="checkbox-row"><input type="checkbox" checked={form.enviar_whatsapp} onChange={(e) => update("enviar_whatsapp", e.target.checked)} /> Enviar por WhatsApp ao salvar</label>
+                    <label className="checkbox-row"><input type="checkbox" checked={form.enviar_whatsapp} onChange={(e) => update("enviar_whatsapp", e.target.checked)} /> Gerar link manual de WhatsApp</label>
                     <label className="checkbox-row"><input type="checkbox" checked={form.enviar_email} onChange={(e) => update("enviar_email", e.target.checked)} /> Enviar por e-mail ao salvar</label>
                   </div>
                 </div>
@@ -830,6 +813,7 @@ export function ImportarBoletoPdfBtn({
                 <div className="alert alert-success" style={{ marginTop: 12 }}>
                   <div style={{ fontWeight: 800, marginBottom: 8 }}>Boleto salvo. Envie agora:</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {links.whatsapp && <a className="btn btn-secondary btn-sm" href={links.whatsapp} target="_blank" rel="noreferrer">Abrir WhatsApp manual</a>}
                     {links.email && <a className="btn btn-secondary btn-sm" href={links.email}>Enviar por e-mail</a>}
                   </div>
                 </div>
@@ -838,7 +822,7 @@ export function ImportarBoletoPdfBtn({
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Cancelar</button>
-              <button className="btn btn-primary" onClick={importar} disabled={saving}>{saving ? "Importando..." : "Salvar boleto e gerar envio"}</button>
+              <button className="btn btn-primary" onClick={importar} disabled={saving}>{saving ? "Importando..." : "Salvar boleto"}</button>
             </div>
           </div>
         </div>

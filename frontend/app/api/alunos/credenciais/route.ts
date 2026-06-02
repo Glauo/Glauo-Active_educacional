@@ -9,6 +9,7 @@ import {
   studentCredentialPhone,
   type StudentCredentialRow,
 } from "@/lib/student-credentials";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type Aluno = StudentCredentialRow & {
   id?: string;
@@ -32,8 +33,8 @@ function phoneFromStudent(aluno: Aluno) {
   return studentCredentialPhone(aluno);
 }
 
-function whatsappUrl(_phone: unknown, _message: string) {
-  return "";
+function whatsappUrl(phone: unknown, message: string) {
+  return manualWhatsAppUrl(phone, message);
 }
 
 function sameStudent(aluno: Aluno, id: string) {
@@ -103,7 +104,7 @@ export async function PUT(req: NextRequest) {
     whatsapp_enviado: notification.whatsapp_enviado,
     email_status: notification.email,
     email_enviado: notification.email_enviado,
-    whatsapp_url: whatsappUrl(notification.telefone, message),
+    whatsapp_url: text((notification as { whatsapp_url?: string }).whatsapp_url) || whatsappUrl(notification.telefone, message),
     whatsapp_message: message,
   });
 }
