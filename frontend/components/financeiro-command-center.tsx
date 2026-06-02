@@ -175,8 +175,8 @@ function SendDocButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           canal,
-          telefone: canal === "whatsapp" ? target : "",
-          email: canal === "email" ? target : "",
+          telefone: "",
+          email: target,
           assunto: message.subject,
           mensagem: message.body,
         }),
@@ -191,8 +191,8 @@ function SendDocButton({
   }
 
   return (
-    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!target || sending} title={!target ? `Sem ${canal === "whatsapp" ? "telefone" : "e-mail"} cadastrado` : ""}>
-      {sending ? "Enviando..." : canal === "whatsapp" ? "WhatsApp" : "E-mail"}
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!target || sending} title={!target ? "Sem e-mail cadastrado" : ""}>
+      {sending ? "Enviando..." : "E-mail"}
     </button>
   );
 }

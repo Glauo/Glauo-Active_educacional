@@ -52,7 +52,7 @@ export interface MpBoletoResult {
  * EndereÃ§o padrÃ£o da escola â€” usado quando o aluno nÃ£o tem endereÃ§o cadastrado.
  * O Mercado Pago EXIGE endereÃ§o completo para boleto registrado.
  */
-const DEFAULT_ADDRESS: MpPayerAddress = {
+const DEFAULT_ADDRESS: Required<MpPayerAddress> = {
   zip_code: "14401-000",
   street_name: "Rua Voluntarios da Franca",
   street_number: "100",
