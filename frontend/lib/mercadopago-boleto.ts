@@ -144,8 +144,29 @@ function payerAddress(lancamento: Row, aluno: Row | null, sistema: Row | null) {
   };
 }
 
+function parseDueDate(value: unknown) {
+  const raw = text(value);
+  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (br) {
+    const day = Number(br[1]);
+    const month = Number(br[2]);
+    const year = Number(br[3]);
+    return new Date(year, month - 1, day, 12, 0, 0, 0);
+  }
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    return new Date(year, month - 1, day, 12, 0, 0, 0);
+  }
+
+  return new Date(raw);
+}
+
 export function expirationDate(value: unknown) {
-  const parsed = new Date(text(value));
+  const parsed = parseDueDate(value);
   let date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -155,13 +176,16 @@ export function expirationDate(value: unknown) {
     date.setDate(date.getDate() + 3);
   }
 
-  const maxDate = new Date();
-  maxDate.setDate(maxDate.getDate() + 29);
+  // Mercado Pago recusa boleto com expiracao acima de 29 dias.
+  // Usamos 28 dias para evitar estouro por conversao de fuso em toISOString().
+  const maxDate = new Date(now);
+  maxDate.setDate(maxDate.getDate() + 28);
+  maxDate.setHours(20, 59, 0, 0);
   if (date > maxDate) {
     date = new Date(maxDate);
   }
 
-  date.setHours(23, 59, 0, 0);
+  date.setHours(20, 59, 0, 0);
   return date.toISOString();
 }
 
