@@ -1,6 +1,7 @@
 "use client";
 
-import { CSSProperties, useState } from "react";
+import { CSSProperties } from "react";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type Props = {
   phone: unknown;
@@ -21,32 +22,12 @@ export function AutoWhatsAppButton({
   className = "btn btn-secondary btn-sm",
   style,
 }: Props) {
-  const [sending, setSending] = useState(false);
   const telefone = text(phone);
+  const href = manualWhatsAppUrl(telefone, message);
 
-  async function send() {
-    if (!telefone || sending) return;
-    setSending(true);
-    try {
-      const res = await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone, mensagem: message }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        alert(`WhatsApp nao enviado automaticamente: ${String(data.status || data.error || "verifique a WAPI")}`);
-      }
-    } catch {
-      alert("Erro ao enviar WhatsApp automatico.");
-    } finally {
-      setSending(false);
-    }
+  if (!href) {
+    return <button className={className} style={style} type="button" disabled>{label}</button>;
   }
 
-  return (
-    <button className={className} style={style} type="button" onClick={send} disabled={!telefone || sending}>
-      {sending ? "Enviando..." : label}
-    </button>
-  );
+  return <a className={className} style={style} href={href} target="_blank" rel="noreferrer">{label}</a>;
 }

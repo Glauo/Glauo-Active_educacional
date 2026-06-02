@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { financeMessage } from "@/lib/finance-message";
+import { boletoAccessUrl } from "@/lib/finance-boleto-links";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type Row = Record<string, unknown>;
 
@@ -72,10 +74,7 @@ function descricaoOf(row: Row) {
 }
 
 function boletoLink(row: Row) {
-  const id = text(row.id);
-  const pdf = text(row.boleto_pdf_url || row.boleto_pdf_public_url);
-  if (pdf) return pdf.startsWith("http") ? pdf : `${window.location.origin}${pdf}`;
-  return id ? `${window.location.origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}` : "";
+  return boletoAccessUrl(row, typeof window !== "undefined" ? window.location.origin : "");
 }
 
 function smartFinanceMessage(row: Row, mode: CobrancaMode) {
@@ -159,6 +158,14 @@ function SendDocButton({
   const [sending, setSending] = useState(false);
   const target = canal === "whatsapp" ? phoneOf(row) : emailOf(row);
 
+  if (canal === "whatsapp") {
+    const href = manualWhatsAppUrl(target, message.body);
+    if (!href) {
+      return <button className="btn btn-secondary btn-sm" type="button" disabled title="Sem telefone cadastrado">WhatsApp manual</button>;
+    }
+    return <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">WhatsApp manual</a>;
+  }
+
   async function send() {
     if (!target || sending) return;
     setSending(true);
@@ -168,8 +175,8 @@ function SendDocButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           canal,
-          telefone: canal === "whatsapp" ? target : "",
-          email: canal === "email" ? target : "",
+          telefone: "",
+          email: target,
           assunto: message.subject,
           mensagem: message.body,
         }),
@@ -184,8 +191,8 @@ function SendDocButton({
   }
 
   return (
-    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!target || sending} title={!target ? `Sem ${canal === "whatsapp" ? "telefone" : "e-mail"} cadastrado` : ""}>
-      {sending ? "Enviando..." : canal === "whatsapp" ? "WhatsApp" : "E-mail"}
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!target || sending} title={!target ? "Sem e-mail cadastrado" : ""}>
+      {sending ? "Enviando..." : "E-mail"}
     </button>
   );
 }
@@ -585,7 +592,7 @@ export function FinanceiroCommandCenter({
           <div>
             <div className="section-eyebrow">Cobranca inteligente</div>
             <h3 className="section-title">Filas prontas para acao</h3>
-            <p className="section-subtitle">Abra a fila, confira a mensagem e envie por WhatsApp ou e-mail sem procurar lancamento por lancamento.</p>
+            <p className="section-subtitle">Abra a fila, confira a mensagem e use o WhatsApp manual ou e-mail sem procurar lancamento por lancamento.</p>
           </div>
         </div>
         <div className="card-body">
@@ -616,7 +623,7 @@ export function FinanceiroCommandCenter({
         <div className="card">
           <div className="card-header">
             <div>
-              <div className="section-eyebrow">Alertas automaticos</div>
+              <div className="section-eyebrow">Alertas financeiros</div>
               <h3 className="section-title">Prioridade de hoje</h3>
             </div>
           </div>

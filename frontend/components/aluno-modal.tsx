@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BOOK_LEVELS, COURSE_MODULES, formatModuleValue, isVipModule, isVipUnlimitedPlan, migrateModule, teacherClassValueByModule, VIP_DEFAULT_TOTAL, VIP_UNLIMITED, vipPlanTotal } from "@/lib/course-modules";
 import { ModalPortal } from "@/components/modal-portal";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 
 type AlunoData = {
   id?: string;
@@ -207,20 +208,11 @@ function credentialMessage(form: Form) {
 }
 
 function whatsappUrl(phone: string, message: string) {
-  return "";
+  return manualWhatsAppUrl(phone, message);
 }
 
 function mailtoUrl(email: string, form: Form) {
   return `mailto:${email}?subject=${encodeURIComponent("Acesso ao portal Active Educacional")}&body=${encodeURIComponent(credentialMessage(form))}`;
-}
-
-async function sendWhatsAppAutomatico(phone: string, message: string) {
-  const res = await fetch("/api/whatsapp/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ telefone: phone, mensagem: message }),
-  });
-  return res.json().catch(() => ({})) as Promise<{ ok?: boolean; status?: string; error?: string }>;
 }
 
 function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: () => void; onSaved: () => void }) {
@@ -379,7 +371,7 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
     const data = await res.json().catch(() => ({}));
     const status = data.notification_status as { whatsapp?: string; email?: string; whatsapp_enviado?: boolean; email_enviado?: boolean } | undefined;
     if (status) {
-      setCredFeedback(`Aluno salvo. WhatsApp: ${status.whatsapp || "nao enviado"}. E-mail: ${status.email || "nao enviado"}.`);
+      setCredFeedback(`Aluno salvo. E-mail: ${status.email || "nao enviado"}. Use WhatsApp manual para enviar acessos.`);
     }
     onSaved();
   }
@@ -405,9 +397,14 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
     }
     const savedLogin = String(data.login || form.login).trim();
     update("login", savedLogin);
-    setCredWhatsappLink("");
-    setCredFeedback(data.whatsapp_enviado ? "Login e senha salvos e enviados automaticamente por WhatsApp." : `Login e senha salvos. WhatsApp nao enviado: ${String(data.whatsapp_status || "verifique a WAPI")}.`);
+    const nextForm = { ...form, login: savedLogin };
+    setCredWhatsappLink(form.responsavel_telefone ? whatsappUrl(form.responsavel_telefone, credentialMessage(nextForm)) : "");
+    setCredFeedback("Login e senha salvos. Abra o WhatsApp manual para enviar ao responsavel.");
   }
+
+  const credentialWhatsappHref = form.login && form.senha && form.responsavel_telefone
+    ? whatsappUrl(form.responsavel_telefone, credentialMessage(form))
+    : "";
 
   return (
     <ModalPortal>
@@ -663,21 +660,15 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
                     {isEdit && <button className="btn btn-primary btn-sm" type="button" onClick={salvarCredenciais} disabled={savingCred}>
                       {savingCred ? "Salvando..." : "Salvar login/senha"}
                     </button>}
-                  <button
-                    type="button"
-                  className={`btn btn-secondary btn-sm${!form.login || !form.senha || !form.responsavel_telefone ? " disabled" : ""}`}
-                    onClick={async () => {
-                      if (!form.login || !form.senha || !form.responsavel_telefone) return;
-                      setSavingCred(true);
-                      const result = await sendWhatsAppAutomatico(form.responsavel_telefone, credentialMessage(form));
-                      setSavingCred(false);
-                      setCredFeedback(result.ok ? "Login e senha enviados automaticamente por WhatsApp." : `WhatsApp nao enviado: ${result.status || result.error || "verifique a WAPI"}.`);
-                      setCredWhatsappLink("");
-                    }}
-                    disabled={!form.login || !form.senha || !form.responsavel_telefone || savingCred}
+                    <a
+                      className={`btn btn-secondary btn-sm${!credentialWhatsappHref ? " disabled" : ""}`}
+                      href={credentialWhatsappHref || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => credentialWhatsappHref && setCredFeedback("WhatsApp manual aberto com a mensagem preparada.")}
                     >
-                    {savingCred ? "Enviando..." : "Enviar login e senha por WhatsApp"}
-                  </button>
+                      Abrir WhatsApp manual
+                    </a>
                     <a
                       className={`btn btn-secondary btn-sm${!form.login || !form.senha || !form.responsavel_email ? " disabled" : ""}`}
                       href={form.login && form.senha && form.responsavel_email ? mailtoUrl(form.responsavel_email, form) : "#"}
@@ -685,7 +676,8 @@ function AlunoModal({ aluno, onClose, onSaved }: { aluno?: AlunoData; onClose: (
                       Enviar login e senha por e-mail
                     </a>
                   </div>
-                  <div className="form-help">{credFeedback || "Ao salvar cadastro com WhatsApp preenchido, o sistema envia automaticamente pela WAPI."}</div>
+                  <div className="form-help">{credFeedback || "Ao salvar cadastro com WhatsApp preenchido, o sistema gera um link para envio manual."}</div>
+                  {credWhatsappLink && <a className="btn btn-secondary btn-sm" href={credWhatsappLink} target="_blank" rel="noreferrer" style={{ marginTop: 8 }}>Abrir WhatsApp preparado</a>}
                 </div>
             </>
           </div>

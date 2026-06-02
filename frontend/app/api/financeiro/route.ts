@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbList, dbListWithoutKeys, dbSet } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { isAdmin } from "@/lib/roles";
 import { financeMessage } from "@/lib/finance-message";
@@ -42,25 +41,6 @@ async function audit(entry: Record<string, unknown>) {
     ...log,
     { id: crypto.randomUUID(), data: new Date().toISOString(), ...entry },
   ]);
-}
-
-function shouldSendWhatsApp(data: Record<string, unknown>) {
-  return data.enviar_whatsapp === true ||
-    text(data.enviar_whatsapp).toLowerCase() === "true" ||
-    text((data.notification_status as Record<string, unknown> | undefined)?.whatsapp) === "link_gerado";
-}
-
-function phoneOf(data: Record<string, unknown>) {
-  return text(
-    data.telefone ||
-    data.whatsapp ||
-    data.celular ||
-    data.responsavel_telefone ||
-    data.telefone_responsavel ||
-    data.celular_responsavel ||
-    data.whatsapp_responsavel ||
-    data.aluno_telefone
-  );
 }
 
 function emailOf(data: Record<string, unknown>) {
@@ -174,6 +154,7 @@ export async function POST(req: NextRequest) {
       if (mpResult.ok) {
         boletoUpdate = {
           boleto_status: "Gerado MP",
+          mercado_pago_ticket_url: mpResult.boleto_url,
           boleto_url: mpResult.boleto_url,
           boleto_codigo: mpResult.barcode || "",
           boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",
@@ -214,15 +195,6 @@ export async function POST(req: NextRequest) {
     lancamentos.push(novo);
     await dbSet(key, lancamentos);
     const origin = new URL(req.url).origin;
-    if (tipo !== "despesas" && shouldSendWhatsApp(data)) {
-      runNotification((async () => {
-        const message = financeMessage(novo, origin);
-        const result = await sendWhatsApp(phoneOf(novo), message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
-        const notificationStatus = { ...(novo.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
-      })(), "whatsapp");
-    }
     if (tipo !== "despesas" && shouldSendEmail(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
@@ -318,6 +290,7 @@ export async function PUT(req: NextRequest) {
       if (mpResult.ok) {
         boletoUpdate = {
           boleto_status: "Gerado MP",
+          mercado_pago_ticket_url: mpResult.boleto_url,
           boleto_url: mpResult.boleto_url,
           boleto_codigo: mpResult.barcode || "",
           boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",
@@ -390,17 +363,6 @@ export async function PUT(req: NextRequest) {
 
     await Promise.all(writes);
     const origin = new URL(req.url).origin;
-    if (tipo !== "despesas" && shouldSendWhatsApp(updates)) {
-      const lancamento = { ...lancamentos[idx] };
-      runNotification((async () => {
-        const message = financeMessage(lancamento, origin);
-        const result = await sendWhatsApp(phoneOf(lancamento), message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
-        const current = atualizados.find((item) => item.id === id) || lancamento;
-        const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
-      })(), "whatsapp");
-    }
     if (tipo !== "despesas" && shouldSendEmail(updates)) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {

@@ -32,7 +32,7 @@ function webhookUrl() {
 }
 
 function precisaRegerar(r: Row) {
-  const boletoUrl = text(r.boleto_url);
+  const boletoUrl = text(r.mercado_pago_ticket_url || r.boleto_url);
   const status = text(r.boleto_status);
   // Precisa regerar se: não tem URL real do MP, ou está com Erro MP, ou tem código AE-
   return (
@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
       updatedMap.set(id, {
         ...lanc,
         boleto_status: "Gerado MP",
+        mercado_pago_ticket_url: mpResult.boleto_url,
         boleto_url: mpResult.boleto_url,
         boleto_codigo: mpResult.barcode || "",
         boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",

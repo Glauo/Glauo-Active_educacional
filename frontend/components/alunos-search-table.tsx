@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { financeMessage } from "@/lib/finance-message";
 import { vipPackageStats } from "@/lib/course-modules";
+import { manualWhatsAppUrl } from "@/lib/manual-whatsapp";
 import { EditarAlunoBtn } from "./aluno-modal";
 import { AutoWhatsAppButton } from "./auto-whatsapp-button";
 import { EditarLancamentoBtn, ImportarBoletoPdfBtn } from "./financeiro-modal";
@@ -104,42 +105,16 @@ function financBadge(s: string) {
 }
 
 function whatsappUrl(phone: unknown, message: string) {
-  return "";
+  return manualWhatsAppUrl(phone, message);
 }
 
 function LegacyAutoWhatsAppButton({ phone, message, label = "WhatsApp", className = "btn btn-secondary btn-sm", style }: { phone: unknown; message: string; label?: string; className?: string; style?: CSSProperties }) {
-  const [sending, setSending] = useState(false);
-  const [fallback, setFallback] = useState("");
   const telefone = text(phone);
-
-  async function send() {
-    if (!telefone || sending) return;
-    setSending(true);
-    setFallback("");
-    try {
-      const res = await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone, mensagem: message }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        setFallback(whatsappUrl(telefone, message));
-        alert(`WhatsApp nao enviado automaticamente: ${String(data.status || data.error || "verifique a WAPI")}`);
-      }
-    } catch {
-      setFallback(whatsappUrl(telefone, message));
-      alert("Erro ao enviar WhatsApp automatico.");
-    } finally {
-      setSending(false);
-    }
-  }
+  const href = whatsappUrl(telefone, message);
 
   return (
     <>
-      <button className={className} style={style} type="button" onClick={send} disabled={!telefone || sending}>
-        {sending ? "Enviando..." : label}
-      </button>
+      {href ? <a className={className} style={style} href={href} target="_blank" rel="noreferrer">{label}</a> : <button className={className} style={style} type="button" disabled>{label}</button>}
     </>
   );
 }

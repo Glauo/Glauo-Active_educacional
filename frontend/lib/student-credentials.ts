@@ -1,7 +1,7 @@
 import type { SessionUser } from "./auth";
 import { polishPortugueseText } from "./portuguese-text";
 import { sendEmail } from "./email";
-import { sendWhatsApp } from "./whatsapp";
+import { manualWhatsAppUrl } from "./manual-whatsapp";
 
 export type StudentCredentialRow = {
   nome?: string;
@@ -98,14 +98,14 @@ export async function notifyStudentCredentials(row: StudentCredentialRow, sessio
   const mensagem = studentCredentialMessage(row, login, senha);
   const phone = studentCredentialPhone(row);
   const email = studentCredentialEmail(row);
-  const [whatsapp, mail] = await Promise.all([
-    phone ? sendWhatsApp(phone, mensagem, session) : Promise.resolve({ ok: false, status: "sem telefone" }),
-    email ? sendEmail(email, "Acesso ao portal Active Educacional", mensagem, session) : Promise.resolve({ ok: false, status: "sem email" }),
-  ]);
+  const mail = email
+    ? await sendEmail(email, "Acesso ao portal Active Educacional", mensagem, session)
+    : { ok: false, status: "sem email" };
   return {
-    whatsapp: whatsapp.ok ? "enviado_wapi" : whatsapp.status,
+    whatsapp: phone ? "link_manual_gerado" : "sem telefone",
+    whatsapp_url: phone ? manualWhatsAppUrl(phone, mensagem) : "",
     email: mail.ok ? "enviado_smtp" : mail.status,
-    whatsapp_enviado: whatsapp.ok,
+    whatsapp_enviado: false,
     email_enviado: mail.ok,
     telefone: phone,
     email_destino: email,

@@ -52,7 +52,7 @@ export interface MpBoletoResult {
  * EndereÃ§o padrÃ£o da escola â€” usado quando o aluno nÃ£o tem endereÃ§o cadastrado.
  * O Mercado Pago EXIGE endereÃ§o completo para boleto registrado.
  */
-const DEFAULT_ADDRESS: MpPayerAddress = {
+const DEFAULT_ADDRESS: Required<MpPayerAddress> = {
   zip_code: "14401-000",
   street_name: "Rua Voluntarios da Franca",
   street_number: "100",
@@ -80,6 +80,57 @@ function normalizeExpiration(value?: string) {
   if (date > maxDate) date = maxDate;
 
   return formatMpDate(date);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function deepText(root: Record<string, unknown>, path: string[]) {
+  let current: unknown = root;
+  for (const key of path) {
+    current = asRecord(current)[key];
+  }
+  return String(current || "").trim();
+}
+
+function normalizeZipCode(value: unknown) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length === 8 ? digits : String(value || "").trim();
+}
+
+function normalizeFederalUnit(value: unknown) {
+  return String(value || DEFAULT_ADDRESS.federal_unit).trim().toUpperCase().slice(0, 2) || DEFAULT_ADDRESS.federal_unit;
+}
+
+function normalizeAddress(address: MpPayerAddress): Required<MpPayerAddress> {
+  return {
+    zip_code: normalizeZipCode(address.zip_code || DEFAULT_ADDRESS.zip_code),
+    street_name: String(address.street_name || DEFAULT_ADDRESS.street_name).trim() || DEFAULT_ADDRESS.street_name,
+    street_number: String(address.street_number || DEFAULT_ADDRESS.street_number || "S/N").trim() || "S/N",
+    neighborhood: String(address.neighborhood || DEFAULT_ADDRESS.neighborhood).trim() || DEFAULT_ADDRESS.neighborhood,
+    city: String(address.city || DEFAULT_ADDRESS.city).trim() || DEFAULT_ADDRESS.city,
+    federal_unit: normalizeFederalUnit(address.federal_unit),
+  };
+}
+
+function extractBoletoUrl(data: Record<string, unknown>) {
+  const candidates = [
+    deepText(data, ["transaction_details", "external_resource_url"]),
+    deepText(data, ["point_of_interaction", "transaction_data", "ticket_url"]),
+    deepText(data, ["point_of_interaction", "transaction_data", "external_resource_url"]),
+    String(data.external_resource_url || "").trim(),
+    String(data.ticket_url || "").trim(),
+  ];
+  return candidates.find((url) => url.startsWith("http")) || "";
+}
+
+function firstNonEmptyRecord(...values: unknown[]) {
+  for (const value of values) {
+    const record = asRecord(value);
+    if (Object.keys(record).length > 0) return record;
+  }
+  return {};
 }
 
 async function getAccessToken(): Promise<string> {
@@ -141,7 +192,7 @@ async function getDefaultAddress(): Promise<MpPayerAddress> {
  * Cria um boleto bancÃ¡rio registrado via API do Mercado Pago.
  * Retorna a URL do boleto (external_resource_url), cÃ³digo de barras e linha digitÃ¡vel.
  */
-export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBoletoResult> {
+export async function criarBoletoMercadoPago(input: MpBoletoInput): Promise<MpBoletoResult> {
   const accessToken = await getAccessToken();
   if (!accessToken) {
     return {
@@ -179,6 +230,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     address = await getDefaultAddress();
   }
 
+  const mpAddress = normalizeAddress(address);
   const body: Record<string, unknown> = {
     transaction_amount: Number(input.transaction_amount.toFixed(2)),
     description: input.description.slice(0, 255),
@@ -189,14 +241,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
       first_name: (input.payer_first_name || "Responsavel").slice(0, 60),
       last_name: (input.payer_last_name || "Financeiro").slice(0, 60),
       ...(cpfFinal ? { identification: { type: cpfTipo, number: cpfFinal } } : {}),
-      address: {
-        zip_code: address.zip_code || DEFAULT_ADDRESS.zip_code,
-        street_name: address.street_name || DEFAULT_ADDRESS.street_name,
-        street_number: address.street_number || DEFAULT_ADDRESS.street_number,
-        neighborhood: address.neighborhood || DEFAULT_ADDRESS.neighborhood,
-        city: address.city || DEFAULT_ADDRESS.city,
-        federal_unit: address.federal_unit || DEFAULT_ADDRESS.federal_unit,
-      },
+      address: mpAddress,
     },
   };
 
@@ -232,9 +277,21 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
       return { ok: false, error: errMsg, raw: data };
     }
 
-    const txDetails = (data.transaction_details as Record<string, unknown>) || {};
-    const boletoUrl = String(txDetails.external_resource_url || "");
-    const barcodeObj = (txDetails.barcode as Record<string, unknown>) || (data.barcode as Record<string, unknown>) || {};
+    const txDetails = asRecord(data.transaction_details);
+    const boletoUrl = extractBoletoUrl(data);
+    if (!boletoUrl) {
+      console.error("[MercadoPago] Pagamento criado sem URL de boleto:", JSON.stringify(data));
+      return {
+        ok: false,
+        payment_id: Number(data.id),
+        status: String(data.status || "pending"),
+        status_detail: String(data.status_detail || ""),
+        error: "Mercado Pago criou o pagamento, mas nao retornou a URL do boleto/ticket.",
+        raw: data,
+      };
+    }
+
+    const barcodeObj = firstNonEmptyRecord(txDetails.barcode, data.barcode);
     const barcode = String(barcodeObj.content || "");
     const digitableLine = String(txDetails.digitable_line || "");
 
@@ -255,3 +312,5 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     return { ok: false, error: errMsg };
   }
 }
+
+export const criarBoleteMercadoPago = criarBoletoMercadoPago;
