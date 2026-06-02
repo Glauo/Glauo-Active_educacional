@@ -82,6 +82,7 @@ function studentKeys(student: Row) {
     ids: [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean),
     logins: [student.login, student.usuario, student.aluno_login, student.email].map(normalize).filter(Boolean),
     names: [student.nome, student.name, student.aluno].map(normalize).filter(Boolean),
+    emails: [student.email, student.aluno_email, student.responsavel_email, student.email_responsavel].map(normalize).filter(Boolean),
   };
 }
 
@@ -89,13 +90,15 @@ function findStudent(students: Row[], item: Row) {
   const itemIds = [item.aluno_id, item.student_id, item.id_aluno, item.studentId].map(normalize).filter(Boolean);
   const itemLogins = [item.aluno_login, item.login, item.usuario, item.aluno_email, item.email].map(normalize).filter(Boolean);
   const itemNames = [item.aluno, item.nome, item.pagador, item.estudante, item.student_name].map(normalize).filter(Boolean);
+  const itemEmails = [item.email, item.aluno_email, item.responsavel_email, item.email_responsavel].map(normalize).filter(Boolean);
 
   return students.find((student) => {
     const keys = studentKeys(student);
     return Boolean(
       itemIds.some((id) => keys.ids.includes(id)) ||
       itemLogins.some((login) => keys.logins.includes(login)) ||
-      itemNames.some((name) => keys.names.includes(name))
+      itemEmails.some((email) => keys.emails.includes(email)) ||
+      itemNames.some((name) => keys.names.some((studentName) => studentName === name || (name.length > 8 && (studentName.includes(name) || name.includes(studentName)))))
     );
   }) || null;
 }
