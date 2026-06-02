@@ -16,6 +16,11 @@ function money(value: unknown) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function isMercadoPagoLink(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 function financeCategory(row: Record<string, unknown>) {
   const raw = normalize(row.tipo_lancamento_detalhe || row.categoria || row.descricao || row.boleto_status);
   if (raw.includes("matric")) return "matricula";
@@ -62,19 +67,16 @@ function introFor(category: string) {
 export function financeMessage(row: Record<string, unknown>, origin = "") {
   const id = text(row.id);
   const pdfUrl = text(row.boleto_pdf_url || row.boleto_pdf_public_url);
-  const boletoUrl = text(row.boleto_url);
+  const boletoUrl = text(row.mercado_pago_ticket_url || row.boleto_url);
   const digitableLine = text(row.digitable_line || row.boleto_linha_digitavel);
-  const barcode = text(row.barcode || row.boleto_codigo);
-  
-  let link = "";
-  if (boletoUrl && boletoUrl.startsWith("http")) {
-    link = boletoUrl;
-  } else if (pdfUrl) {
-    link = pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`;
-  } else if (id) {
-    link = `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
-  }
-
+  const barcode = text(row.boleto_codigo);
+  const link = isMercadoPagoLink(boletoUrl)
+    ? boletoUrl
+    : id
+      ? `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`
+      : pdfUrl
+      ? (pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`)
+      : origin;
   const category = financeCategory(row);
   const title = categoryTitle(category);
   const aluno = text(row.aluno || row.nome || "Aluno");
@@ -83,7 +85,6 @@ export function financeMessage(row: Record<string, unknown>, origin = "") {
   const vencimento = text(row.vencimento || row.data_vencimento);
   const status = text(row.status || row.situacao);
   const subject = `${title} Active Educacional - ${referencia || aluno}`;
-  
   const lines = [
     `Olá, ${aluno}!`,
     "",
@@ -94,26 +95,14 @@ export function financeMessage(row: Record<string, unknown>, origin = "") {
     `Valor: ${money(row.valor_parcela || row.valor || row.valor_total)}`,
     vencimento ? `Vencimento: ${vencimento}` : "",
     status ? `Status: ${status}` : "",
-  ];
+    digitableLine ? "Linha digitável:" : "",
+    digitableLine,
+    !digitableLine && barcode ? `Código de barras: ${barcode}` : "",
+    "",
+    link ? `Acesse aqui: ${link}` : "",
+    "",
+    "Em caso de dúvida, fale com a secretaria da Active Educacional.",
+  ].filter((line) => line !== "");
 
-  if (digitableLine) {
-    lines.push("");
-    lines.push("LINHA DIGITÁVEL:");
-    lines.push(digitableLine);
-  }
-
-  if (barcode && !digitableLine) {
-    lines.push("");
-    lines.push(`Código de barras: ${barcode}`);
-  }
-
-  lines.push("");
-  if (link) {
-    lines.push(`Acesse aqui: ${link}`);
-  }
-
-  lines.push("");
-  lines.push("Em caso de dúvida, fale com a secretaria da Active Educacional.");
-
-  return { subject: polishPortugueseText(subject), body: polishPortugueseText(lines.filter((line) => line !== "").join("\n")) };
+  return { subject: polishPortugueseText(subject), body: polishPortugueseText(lines.join("\n")) };
 }

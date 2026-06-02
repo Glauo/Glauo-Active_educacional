@@ -5,18 +5,10 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { isAdmin } from "@/lib/roles";
 import { financeMessage } from "@/lib/finance-message";
-import { criarBoleteMercadoPago } from "@/lib/mercadopago";
+import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
 
 function text(value: unknown) {
   return String(value || "").trim();
-}
-
-function mercadoPagoWebhookUrl() {
-  return (
-    process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL ||
-    process.env.MERCADO_PAGO_WEBHOOK_URL ||
-    "https://ativoeducacional.tech/api/financeiro/mercado-pago/webhook"
-  );
 }
 
 const HEAVY_KEYS = ["boleto_pdf_b64", "file_b64", "pdf_b64", "base64", "arquivo_b64", "foto_b64", "imagem_b64", "documento_b64", "anexo_b64"];
@@ -55,6 +47,7 @@ function phoneOf(data: Record<string, unknown>) {
     data.telefone ||
     data.whatsapp ||
     data.celular ||
+    data.phone ||
     data.responsavel_telefone ||
     data.telefone_responsavel ||
     data.celular_responsavel ||
@@ -83,6 +76,34 @@ function shouldSendEmail(data: Record<string, unknown>) {
   return data.enviar_email === true ||
     text(data.enviar_email).toLowerCase() === "true" ||
     text((data.notification_status as Record<string, unknown> | undefined)?.email) === "link_gerado";
+}
+
+async function maybeGenerateMercadoPagoBoleto(
+  lancamento: Record<string, unknown>,
+  id: string,
+  origin: string,
+  wantsBoleto: boolean,
+  hasImportedPdf: boolean,
+) {
+  if (!wantsBoleto || hasImportedPdf) return { ok: true as const, lancamento };
+  if (text(lancamento.mercado_pago_ticket_url).startsWith("http")) return { ok: true as const, lancamento };
+
+  const result = await createMercadoPagoBoleto(lancamento, id, origin);
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      title: result.title,
+      error: result.message,
+      detail: result.detail,
+    };
+  }
+
+  const recebimentos = await dbList<Record<string, unknown>>("receivables.json");
+  const refreshed = recebimentos.find((item) => text(item.id) === id);
+  return {
+    ok: true as const,
+    lancamento: refreshed || applyMercadoPagoToLancamento(lancamento, result),
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -135,77 +156,8 @@ export async function POST(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(data.boleto_pdf_mime) || "application/pdf",
     } : {};
-
-    // Integracao Mercado Pago: gerar boleto real ao marcar "gerar_boleto"
-    let boletoUpdate: Record<string, unknown> = {};
-    if (data.gerar_boleto && tipo !== "despesas") {
-      const valor = parseFloat(String(data.valor || data.valor_parcela || "0").replace(/[^\d.,-]/g, "").replace(",", ".")) || 0;
-      const nomeAluno = text(data.aluno || data.nome || "");
-      const nomeParts = nomeAluno.split(" ");
-      const payerEmail = text(data.email || data.email_responsavel || "") ||
-        `aluno.${nomeAluno.replace(/\s+/g, ".").toLowerCase()}@activeeducacional.com.br`;
-      const vencimentoRaw = text(data.vencimento || data.data_vencimento || "");
-      const brMatchPost = vencimentoRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-      const vencimentoISO = brMatchPost ? `${brMatchPost[3]}-${brMatchPost[2]}-${brMatchPost[1]}` : vencimentoRaw;
-      const dateOfExpiration = vencimentoISO ? `${vencimentoISO}T23:59:59.000-03:00` : undefined;
-
-      // Endereço do pagador (obrigatório para boleto registrado no MP)
-      const payerAddress = {
-        zip_code: text(data.cep) || undefined,
-        street_name: text(data.rua || data.endereco) || undefined,
-        street_number: text(data.numero) || undefined,
-        neighborhood: text(data.bairro) || undefined,
-        city: text(data.cidade) || undefined,
-        federal_unit: text(data.estado || data.uf) || undefined,
-      };
-      const mpResult = await criarBoleteMercadoPago({
-        transaction_amount: valor,
-        description: text(data.descricao) || `Mensalidade - ${nomeAluno}`,
-        payer_email: payerEmail,
-        payer_first_name: nomeParts[0] || "Responsavel",
-        payer_last_name: nomeParts.slice(1).join(" ") || "Financeiro",
-        payer_cpf: text(data.cpf || data.responsavel_cpf || ""),
-        payer_address: payerAddress,
-        date_of_expiration: dateOfExpiration,
-        external_reference: id,
-        notification_url: mercadoPagoWebhookUrl(),
-      });
-
-      if (mpResult.ok) {
-        boletoUpdate = {
-          boleto_status: "Gerado MP",
-          boleto_url: mpResult.boleto_url,
-          boleto_codigo: mpResult.barcode || "",
-          boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",
-          mp_payment_id: mpResult.payment_id,
-          mp_status: mpResult.status,
-          mp_status_detail: mpResult.status_detail,
-          mp_date_of_expiration: mpResult.date_of_expiration,
-          boleto_gerado_em: new Date().toISOString(),
-          status: data.status || "Boleto gerado",
-        };
-      } else {
-        console.error("[financeiro POST] Erro Mercado Pago:", mpResult.error);
-        return NextResponse.json({
-          ok: false,
-          title: "Falha ao gerar boleto Mercado Pago",
-          error: mpResult.error || "Nao foi possivel gerar o boleto no Mercado Pago.",
-          detail: "Verifique Access Token, CPF/CNPJ, e-mail e endereco do pagador.",
-        }, { status: 422 });
-      }
-    } else if (data.gerar_boleto) {
-      // Despesas: manter comportamento anterior (sem MP)
-      boletoUpdate = {
-        boleto_status: "Gerado",
-        boleto_codigo: text(data.boleto_codigo) || `AE-${String(id).slice(0, 8).toUpperCase()}`,
-        boleto_gerado_em: new Date().toISOString(),
-        status: data.status || "Boleto gerado",
-      };
-    }
-
     const novo = {
       ...data,
-      ...boletoUpdate,
       ...pdfUpdate,
       id,
       created_at: new Date().toISOString(),
@@ -214,6 +166,19 @@ export async function POST(req: NextRequest) {
     lancamentos.push(novo);
     await dbSet(key, lancamentos);
     const origin = new URL(req.url).origin;
+
+    if (tipo !== "despesas" && data.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
+      const mp = await maybeGenerateMercadoPagoBoleto(novo, id, origin, true, false);
+      if (!mp.ok) {
+        return NextResponse.json({
+          error: mp.error,
+          title: mp.title,
+          detail: mp.detail,
+          lancamento: novo,
+        }, { status: 422 });
+      }
+      Object.assign(novo, mp.lancamento);
+    }
     if (tipo !== "despesas" && shouldSendWhatsApp(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
@@ -279,74 +244,6 @@ export async function PUT(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(updates.boleto_pdf_mime) || "application/pdf",
     } : {};
-    // Integracao Mercado Pago no PUT (re-gerar boleto)
-    let boletoUpdate: Record<string, unknown> = {};
-    if (updates.gerar_boleto && tipo !== "despesas") {
-      const lancAtual = lancamentos[idx];
-      const valor = parseFloat(String(updates.valor || lancAtual.valor || updates.valor_parcela || "0").replace(/[^\d.,-]/g, "").replace(",", ".")) || 0;
-      const nomeAluno = text(updates.aluno || lancAtual.aluno || updates.nome || lancAtual.nome || "");
-      const nomeParts = nomeAluno.split(" ");
-      const payerEmail = text(updates.email || lancAtual.email || updates.email_responsavel || "") ||
-        `aluno.${nomeAluno.replace(/\s+/g, ".").toLowerCase()}@activeeducacional.com.br`;
-      const vencimentoRawPut = text(updates.vencimento || lancAtual.vencimento || updates.data_vencimento || "");
-      const brMatchPut = vencimentoRawPut.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-      const vencimentoISOPut = brMatchPut ? `${brMatchPut[3]}-${brMatchPut[2]}-${brMatchPut[1]}` : vencimentoRawPut;
-      const dateOfExpiration = vencimentoISOPut ? `${vencimentoISOPut}T23:59:59.000-03:00` : undefined;
-
-      // Endereço do pagador (obrigatório para boleto registrado no MP)
-      const payerAddress = {
-        zip_code: text(updates.cep || lancAtual.cep) || undefined,
-        street_name: text(updates.rua || lancAtual.rua || updates.endereco || lancAtual.endereco) || undefined,
-        street_number: text(updates.numero || lancAtual.numero) || undefined,
-        neighborhood: text(updates.bairro || lancAtual.bairro) || undefined,
-        city: text(updates.cidade || lancAtual.cidade) || undefined,
-        federal_unit: text(updates.estado || lancAtual.estado || updates.uf || lancAtual.uf) || undefined,
-      };
-      const mpResult = await criarBoleteMercadoPago({
-        transaction_amount: valor,
-        description: text(updates.descricao || lancAtual.descricao) || `Mensalidade - ${nomeAluno}`,
-        payer_email: payerEmail,
-        payer_first_name: nomeParts[0] || "Responsavel",
-        payer_last_name: nomeParts.slice(1).join(" ") || "Financeiro",
-        payer_cpf: text(updates.cpf || lancAtual.cpf || updates.responsavel_cpf || lancAtual.responsavel_cpf || ""),
-        payer_address: payerAddress,
-        date_of_expiration: dateOfExpiration,
-        external_reference: id,
-        notification_url: mercadoPagoWebhookUrl(),
-      });
-
-      if (mpResult.ok) {
-        boletoUpdate = {
-          boleto_status: "Gerado MP",
-          boleto_url: mpResult.boleto_url,
-          boleto_codigo: mpResult.barcode || "",
-          boleto_linha_digitavel: mpResult.digitable_line || mpResult.barcode || "",
-          mp_payment_id: mpResult.payment_id,
-          mp_status: mpResult.status,
-          mp_status_detail: mpResult.status_detail,
-          mp_date_of_expiration: mpResult.date_of_expiration,
-          boleto_gerado_em: new Date().toISOString(),
-          status: updates.status || "Boleto gerado",
-        };
-      } else {
-        console.error("[financeiro PUT] Erro Mercado Pago:", mpResult.error);
-        return NextResponse.json({
-          ok: false,
-          title: "Falha ao gerar boleto Mercado Pago",
-          error: mpResult.error || "Nao foi possivel gerar o boleto no Mercado Pago.",
-          detail: "Verifique Access Token, CPF/CNPJ, e-mail e endereco do pagador.",
-          lancamento: lancamentos[idx],
-        }, { status: 422 });
-      }
-    } else if (updates.gerar_boleto) {
-      boletoUpdate = {
-        boleto_status: "Gerado",
-        boleto_codigo: text(lancamentos[idx].boleto_codigo) || `AE-${String(id).slice(0, 8).toUpperCase()}`,
-        boleto_gerado_em: new Date().toISOString(),
-        status: updates.status || "Boleto gerado",
-      };
-    }
-
     const estornoUpdate = isReversal ? {
       status: "Pendente",
       estornado_em: new Date().toISOString(),
@@ -360,7 +257,6 @@ export async function PUT(req: NextRequest) {
     lancamentos[idx] = {
       ...lancamentos[idx],
       ...updates,
-      ...boletoUpdate,
       ...pdfUpdate,
       ...estornoUpdate,
       updated_at: new Date().toISOString(),
@@ -390,6 +286,21 @@ export async function PUT(req: NextRequest) {
 
     await Promise.all(writes);
     const origin = new URL(req.url).origin;
+
+    if (tipo !== "despesas" && updates.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
+      const mp = await maybeGenerateMercadoPagoBoleto(lancamentos[idx], id, origin, true, false);
+      if (!mp.ok) {
+        return NextResponse.json({
+          error: mp.error,
+          title: mp.title,
+          detail: mp.detail,
+          lancamento: lancamentos[idx],
+        }, { status: 422 });
+      }
+      lancamentos[idx] = mp.lancamento;
+      await dbSet(key, lancamentos);
+    }
+
     if (tipo !== "despesas" && shouldSendWhatsApp(updates)) {
       const lancamento = { ...lancamentos[idx] };
       runNotification((async () => {
