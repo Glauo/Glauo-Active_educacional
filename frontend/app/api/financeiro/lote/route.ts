@@ -33,12 +33,6 @@ export async function POST(req: NextRequest) {
   const valorPadrao = money(body.valor_padrao);
   const dia = Math.max(1, Math.min(28, Number(body.dia_vencimento) || 10));
   const vencimento = `${competencia}-${String(dia).padStart(2, "0")}`;
-
-  // Data de expiração para o Mercado Pago no formato ISO com timezone BR
-  const [ano, mes] = competencia.split("-");
-  const diaStr = String(dia).padStart(2, "0");
-  const dateOfExpiration = `${ano}-${mes}-${diaStr}T23:59:59.000-03:00`;
-
   const [students, receivables, audit] = await Promise.all([
     dbList<Record<string, unknown>>("students.json"),
     dbList<Record<string, unknown>>("receivables.json"),
@@ -97,7 +91,6 @@ export async function POST(req: NextRequest) {
       payer_last_name: lastName,
       payer_cpf: cpf,
       payer_address: payerAddress,
-      date_of_expiration: dateOfExpiration,
       external_reference: id,
       notification_url: webhookUrl(),
     });
@@ -185,3 +178,4 @@ export async function POST(req: NextRequest) {
     detalhes_erros_mp: errosMp,
   });
 }
+

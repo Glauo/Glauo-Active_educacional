@@ -21,7 +21,7 @@ export type CriarPagamentoBoletoInput = {
   transactionAmount: number;
   description: string;
   externalReference: string;
-  dateOfExpiration: string;
+  dateOfExpiration?: string;
   payer: PagadorBoleto;
   notificationUrl?: string;
   idempotencyKey?: string;
@@ -148,12 +148,10 @@ export async function criarPagamentoBoleto(
     const client = new MercadoPagoConfig({ accessToken: input.accessToken });
     const payment = new Payment(client);
 
-    const response = await payment.create({
-      body: {
+    const body: Record<string, unknown> = {
         transaction_amount: input.transactionAmount,
         description: input.description,
         payment_method_id: "bolbradesco",
-        date_of_expiration: input.dateOfExpiration,
         external_reference: input.externalReference,
         binary_mode: true,
         statement_descriptor: "ACTIVE EDUCACIONAL",
@@ -176,7 +174,11 @@ export async function criarPagamentoBoleto(
             federal_unit: input.payer.address.federal_unit,
           },
         },
-      },
+      };
+    if (input.dateOfExpiration) body.date_of_expiration = input.dateOfExpiration;
+
+    const response = await payment.create({
+      body,
       requestOptions: {
         idempotencyKey: input.idempotencyKey || `active-boleto-${input.externalReference}`,
       },

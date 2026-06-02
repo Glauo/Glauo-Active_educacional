@@ -82,13 +82,6 @@ export async function POST(req: NextRequest) {
     const payerEmail =
       text(lanc.email || lanc.email_responsavel) ||
       `aluno.${nomeAluno.replace(/\s+/g, ".").toLowerCase()}@activeeducacional.com.br`;
-    const vencimentoRaw = text(lanc.vencimento || lanc.data_vencimento);
-    // Converter data BR (DD/MM/YYYY) para ISO (YYYY-MM-DD) se necessario
-    let vencimentoISO = vencimentoRaw;
-    const brMatch = vencimentoRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    if (brMatch) vencimentoISO = `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-    const dateOfExpiration = vencimentoISO ? `${vencimentoISO}T23:59:59.000-03:00` : undefined;
-
     if (!valor || valor <= 0) {
       resultados.push({ id, aluno: nomeAluno, ok: false, erro: "Valor invalido" });
       continue;
@@ -111,7 +104,6 @@ export async function POST(req: NextRequest) {
       payer_last_name: nomeParts.slice(1).join(" ") || "Financeiro",
       payer_cpf: text(lanc.cpf || lanc.responsavel_cpf || ""),
       payer_address: payerAddress,
-      date_of_expiration: dateOfExpiration,
       external_reference: id,
       notification_url: webhookUrl(),
     });

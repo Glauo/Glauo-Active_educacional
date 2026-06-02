@@ -220,14 +220,16 @@ function boletoErrorMessage(data: Record<string, unknown>) {
 
 function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
   const [sending, setSending] = useState(false);
-  const phone = financePhone(lancamento);
+  const [currentLancamento, setCurrentLancamento] = useState<Lancamento>(lancamento);
+  const phone = financePhone(currentLancamento);
 
   async function send() {
-    if (!phone || sending) return;
+    if (sending) return;
     setSending(true);
     try {
-      let current: Lancamento = lancamento;
-      if (!String(current.mercado_pago_ticket_url || current.boleto_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim()) {
+      let current: Lancamento = currentLancamento;
+      let currentPhone = financePhone(current);
+      if (!String(current.mercado_pago_ticket_url || current.boleto_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim() || !currentPhone) {
         const res = await fetch("/api/financeiro", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -239,6 +241,12 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
           return;
         }
         current = (data.lancamento || current) as Lancamento;
+        setCurrentLancamento(current);
+        currentPhone = financePhone(current);
+      }
+      if (!currentPhone) {
+        alert("WhatsApp nao encontrado no lancamento nem no cadastro do aluno.");
+        return;
       }
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const link = boletoLink(current);
@@ -246,7 +254,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
       const sendRes = await fetch("/api/whatsapp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: phone, mensagem: message }),
+        body: JSON.stringify({ telefone: currentPhone, mensagem: message }),
       });
       const sendData = await sendRes.json().catch(() => ({}));
       if (!sendRes.ok || !sendData.ok) {
@@ -260,7 +268,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
   }
 
   return (
-    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!phone || sending} title={!phone ? "Sem telefone cadastrado" : ""}>
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={sending} title={!phone ? "Busca o WhatsApp no cadastro do aluno antes de enviar" : ""}>
       {sending ? "Enviando..." : "WhatsApp"}
     </button>
   );

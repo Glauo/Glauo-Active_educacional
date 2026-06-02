@@ -61,27 +61,6 @@ const DEFAULT_ADDRESS: MpPayerAddress = {
   federal_unit: "SP",
 };
 
-function formatMpDate(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T23:59:59.000-03:00`;
-}
-
-function normalizeExpiration(value?: string) {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  let date = value ? new Date(value) : new Date(NaN);
-  if (Number.isNaN(date.getTime()) || date < now) {
-    date = new Date(now);
-    date.setDate(date.getDate() + 3);
-  }
-
-  const maxDate = new Date(now);
-  maxDate.setDate(maxDate.getDate() + 29);
-  if (date > maxDate) date = maxDate;
-
-  return formatMpDate(date);
-}
-
 async function getAccessToken(): Promise<string> {
   // 1. VariÃ¡vel de ambiente
   const envToken =
@@ -150,7 +129,6 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     };
   }
 
-  const expiration = normalizeExpiration(input.date_of_expiration);
   const [boletoConfig, sistemaConfig] = await Promise.all([
     dbGet<Record<string, unknown>>("boleto_config.json").catch(() => null),
     dbGet<Record<string, unknown>>("sistema_config.json").catch(() => null),
@@ -183,7 +161,6 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
     transaction_amount: Number(input.transaction_amount.toFixed(2)),
     description: input.description.slice(0, 255),
     payment_method_id: "bolbradesco",
-    date_of_expiration: expiration,
     payer: {
       email: input.payer_email || "pagador@activeeducacional.com.br",
       first_name: (input.payer_first_name || "Responsavel").slice(0, 60),
@@ -246,7 +223,7 @@ export async function criarBoleteMercadoPago(input: MpBoletoInput): Promise<MpBo
       boleto_url: boletoUrl,
       barcode,
       digitable_line: digitableLine,
-      date_of_expiration: String(data.date_of_expiration || expiration),
+      date_of_expiration: String(data.date_of_expiration || ""),
       raw: data,
     };
   } catch (err) {
