@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/api/version",
   "/api/financeiro/mercado-pago/webhook",
+  "/api/me/locale",
 ];
 const PUBLIC_FILES = ["/logo.png", "/manifest.json", "/sw.js", "/limpar-cache.html"];
 

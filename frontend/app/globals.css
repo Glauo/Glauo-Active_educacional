@@ -3654,3 +3654,26 @@
     flex-direction: column;
   }
 }
+
+/* Locale switcher */
+.locale-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.locale-switcher-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.locale-switcher-select {
+  min-width: 140px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+}
+.topbar-locale .locale-switcher-select {
+  min-width: 120px;
+}
+.student-top-actions .locale-switcher {
+  margin-right: 4px;
+}

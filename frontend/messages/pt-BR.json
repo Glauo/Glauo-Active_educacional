@@ -1,0 +1,113 @@
+{
+  "common": {
+    "save": "Salvar alterações",
+    "saving": "Salvando…",
+    "cancel": "Cancelar",
+    "loading": "Carregando…",
+    "error": "Erro",
+    "savedSuccess": "Configurações salvas com sucesso!"
+  },
+  "locale": {
+    "label": "Idioma de exibição",
+    "ptBR": "Português (Brasil)",
+    "enUS": "English (US)"
+  },
+  "shell": {
+    "brandName": "Ativo Educacional",
+    "brandTagline": "Sistema Educacional",
+    "systemOperational": "Sistema operacional",
+    "greeting": "Olá, {name}",
+    "logout": "Sair do sistema",
+    "loggingOut": "Saindo...",
+    "openMenu": "Abrir menu",
+    "notifications": "Notificações",
+    "breadcrumbRoot": "Ativo Educacional"
+  },
+  "nav": {
+    "sections": {
+      "principal": "Principal",
+      "academic": "Acadêmico",
+      "management": "Gestão"
+    },
+    "items": {
+      "root": "Dashboard",
+      "alunos": "Alunos",
+      "professores": "Professores",
+      "turmas": "Turmas",
+      "agenda": "Agenda",
+      "mural": "Mural",
+      "licoes": "Lições de Casa",
+      "correcao-licoes": "Correção de Lições",
+      "desafios": "Desafios",
+      "notas": "Notas",
+      "biblioteca": "Biblioteca",
+      "financeiro": "Financeiro",
+      "comercial": "Comercial",
+      "atendimento": "Atendimento",
+      "estoque": "Estoque",
+      "wiz": "Wiz IA",
+      "condojob": "CondoJob",
+      "configuracoes": "Configurações",
+      "usuarios_credenciais": "Acessos"
+    }
+  },
+  "login": {
+    "headline": "A plataforma que transforma sua escola",
+    "feature1Title": "Gestão Completa de Alunos",
+    "feature1Desc": "Matrículas, frequência, desempenho e histórico financeiro em um só lugar.",
+    "feature2Title": "Financeiro Inteligente",
+    "feature2Desc": "Controle de recebimentos, inadimplência e relatórios automáticos.",
+    "feature3Title": "Wiz IA — Assistente Virtual",
+    "feature3Desc": "Inteligência artificial que automatiza tarefas e responde alunos via WhatsApp.",
+    "statsLabel": "Funções do sistema",
+    "statPortal": "Portal",
+    "statPortalDesc": "Aluno, responsável e professor",
+    "statFinance": "Financeiro",
+    "statFinanceDesc": "Boletos, parcelas e baixas",
+    "statWapi": "W-API",
+    "statWapiDesc": "Envios automáticos por WhatsApp",
+    "badge": "Acesso exclusivo - Sistema Educacional",
+    "title": "Bem-vindo de volta",
+    "subtitle": "Entre com suas credenciais para acessar o sistema.",
+    "unit": "Filial / Unidade",
+    "user": "Usuário",
+    "userPlaceholder": "Seu usuário de acesso",
+    "password": "Senha",
+    "submit": "Acessar sistema",
+    "submitting": "Verificando...",
+    "invalidCredentials": "Credenciais inválidas. Tente novamente.",
+    "connectionError": "Erro de conexão. Verifique sua internet e tente novamente.",
+    "secure": "Conexão segura — SSL/TLS",
+    "footer": "Ativo Educacional 2026 - Sistema de Gestão Educacional"
+  },
+  "alunoLogin": {
+    "title": "Área do Aluno",
+    "subtitle": "Acesse seus desafios, materiais e acompanhe seu progresso na Ativo Educacional.",
+    "feature1": "Desafios e pontuação",
+    "feature2": "Biblioteca e materiais",
+    "feature3": "Seu progresso e histórico",
+    "welcome": "Bem-vindo de volta",
+    "instructions": "Use o login e a senha fornecidos pela escola.",
+    "login": "Login",
+    "loginPlaceholder": "Seu login de acesso",
+    "password": "Senha",
+    "passwordPlaceholder": "Sua senha",
+    "submit": "Entrar na minha área",
+    "submitting": "Entrando…",
+    "invalidCredentials": "Login ou senha incorretos.",
+    "connectionError": "Erro de conexão. Tente novamente.",
+    "help": "Problemas com seu acesso? Fale com a secretaria.",
+    "adminLink": "Acesso administrativo →"
+  },
+  "settings": {
+    "title": "Configurações",
+    "description": "Parâmetros gerais do sistema, integrações e permissões por perfil.",
+    "eyebrow": "Sistema",
+    "displayLanguage": {
+      "eyebrow": "Regionalização",
+      "title": "Idioma de exibição",
+      "label": "Idioma padrão do sistema",
+      "help": "Define o idioma da interface e o formato de datas e valores para novos acessos. Usuários podem alterar no menu superior."
+    }
+  }
+}

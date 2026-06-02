@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { PWARegister } from "@/components/pwa-register";
 import { AppRecovery } from "@/components/app-recovery";
@@ -38,13 +40,16 @@ export const viewport: Viewport = {
   userScalable: false
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="pt-BR">
+    <html lang={locale}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -60,10 +65,12 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icons/icon-192.png" />
       </head>
       <body>
-        <PWARegister />
-        <AppRecovery />
-        <TextPolisher />
-        {children}
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <PWARegister />
+          <AppRecovery />
+          {locale === "pt-BR" ? <TextPolisher /> : null}
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );
