@@ -4,7 +4,7 @@ import { criarPagamentoBoleto, resolveIdentification } from "@/lib/criar-pagamen
 type Row = Record<string, unknown>;
 
 export type MercadoPagoBoletoResult =
-  | { ok: true; url: string; linha: string; paymentId: string }
+  | { ok: true; url: string; linha: string; paymentId: string; lancamento?: Row }
   | { ok: false; title: string; message: string; detail?: string };
 
 function text(value: unknown) {
@@ -43,6 +43,18 @@ function lastName(fullName: string) {
 
 function firstPresent(...values: unknown[]) {
   return values.map(text).find(Boolean) || "";
+}
+
+function compactRow(row: Row) {
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => text(value))) as Row;
+}
+
+function pickNormalized(row: Row, keys: string[]) {
+  return keys.map((key) => normalize(row[key])).filter(Boolean);
+}
+
+function pickDigits(row: Row, keys: string[]) {
+  return keys.map((key) => digits(row[key])).filter(Boolean);
 }
 
 function firstValidDocument(...values: unknown[]) {
@@ -130,22 +142,88 @@ function payerAddress(lancamento: Row, aluno: Row | null, sistema: Row | null) {
 }
 
 function findStudent(students: Row[], lancamento: Row) {
-  const id = normalize(lancamento.aluno_id || lancamento.student_id || lancamento.id_aluno);
-  const login = normalize(lancamento.aluno_login || lancamento.login || lancamento.usuario);
-  const nome = normalize(lancamento.aluno || lancamento.nome || lancamento.pagador);
-  const email = normalize(lancamento.email || lancamento.aluno_email || lancamento.responsavel_email || lancamento.email_responsavel);
+  const chargeIds = pickNormalized(lancamento, [
+    "aluno_id", "student_id", "studentId", "id_aluno", "idAluno", "codigo_aluno", "codigo", "matricula", "aluno_matricula", "matricula_aluno",
+  ]);
+  const chargeLogins = pickNormalized(lancamento, ["aluno_login", "login", "usuario", "user", "username"]);
+  const chargeNames = pickNormalized(lancamento, [
+    "aluno", "aluno_nome", "nome_aluno", "nome", "pagador", "estudante", "student_name", "responsavel", "responsavel_nome",
+  ]);
+  const chargeEmails = pickNormalized(lancamento, [
+    "email", "aluno_email", "email_aluno", "responsavel_email", "email_responsavel", "payer_email",
+  ]);
+  const chargeDocs = pickDigits(lancamento, [
+    "cpf", "cpf_aluno", "cpf_do_aluno", "aluno_cpf", "responsavel_cpf", "cpf_responsavel", "documento", "documento_pagador", "cnpj",
+  ]);
+  const chargePhones = pickDigits(lancamento, [
+    "telefone", "celular", "whatsapp", "aluno_telefone", "aluno_celular", "responsavel_telefone", "telefone_responsavel", "responsavel_celular",
+  ]);
+
   return students.find((student) => {
-    const ids = [student.id, student._id, student.uuid, student.codigo, student.matricula].map(normalize).filter(Boolean);
-    const logins = [student.login, student.usuario, student.aluno_login, student.email].map(normalize).filter(Boolean);
-    const nomes = [student.nome, student.name, student.nome_completo, student.aluno].map(normalize).filter(Boolean);
-    const emails = [student.email, student.aluno_email, student.responsavel_email, student.email_responsavel].map(normalize).filter(Boolean);
+    const responsavel = asRow(student.responsavel);
+    const ids = pickNormalized(student, ["id", "_id", "uuid", "codigo", "codigo_aluno", "matricula", "aluno_id"]);
+    const logins = pickNormalized(student, ["login", "usuario", "aluno_login", "email"]);
+    const nomes = [
+      ...pickNormalized(student, ["nome", "name", "nome_completo", "aluno", "aluno_nome", "nome_aluno", "responsavel_nome", "responsavel_financeiro"]),
+      ...pickNormalized(responsavel, ["nome", "name"]),
+    ];
+    const emails = [
+      ...pickNormalized(student, ["email", "aluno_email", "email_aluno", "responsavel_email", "email_responsavel"]),
+      ...pickNormalized(responsavel, ["email", "email_responsavel"]),
+    ];
+    const docs = [
+      ...pickDigits(student, ["cpf", "cpf_aluno", "cpf_do_aluno", "aluno_cpf", "responsavel_cpf", "cpf_responsavel", "documento", "documento_pagador", "cnpj"]),
+      ...pickDigits(responsavel, ["cpf", "cpf_responsavel", "documento", "cnpj"]),
+    ];
+    const phones = [
+      ...pickDigits(student, ["telefone", "celular", "whatsapp", "aluno_telefone", "aluno_celular", "responsavel_telefone", "telefone_responsavel", "responsavel_celular"]),
+      ...pickDigits(responsavel, ["telefone", "celular", "whatsapp"]),
+    ];
+
     return Boolean(
-      (id && ids.includes(id)) ||
-      (login && logins.includes(login)) ||
-      (email && emails.includes(email)) ||
-      (nome && nomes.some((studentName) => studentName === nome || (nome.length > 8 && (studentName.includes(nome) || nome.includes(studentName)))))
+      chargeIds.some((id) => ids.includes(id)) ||
+      chargeLogins.some((login) => logins.includes(login)) ||
+      chargeEmails.some((email) => emails.includes(email)) ||
+      chargeDocs.some((doc) => docs.includes(doc)) ||
+      chargePhones.some((phone) => phone.length >= 10 && phones.includes(phone)) ||
+      chargeNames.some((nome) => nomes.some((studentName) => studentName === nome || (nome.length > 8 && (studentName.includes(nome) || nome.includes(studentName)))))
     );
   }) || null;
+}
+
+function studentFinancePatch(aluno: Row | null) {
+  if (!aluno) return {};
+  const responsavel = asRow(aluno.responsavel);
+  const alunoNome = firstPresent(aluno.nome, aluno.name, aluno.nome_completo, aluno.aluno);
+  const responsavelNome = firstPresent(aluno.responsavel_nome, aluno.responsavel_financeiro, responsavel.nome, responsavel.name);
+  const responsavelEmail = firstPresent(aluno.responsavel_email, aluno.email_responsavel, responsavel.email, responsavel.email_responsavel);
+  const responsavelTelefone = firstPresent(aluno.responsavel_telefone, aluno.telefone_responsavel, aluno.responsavel_celular, responsavel.celular, responsavel.telefone, responsavel.whatsapp);
+  const alunoTelefone = firstPresent(aluno.celular, aluno.telefone, aluno.whatsapp, aluno.aluno_telefone, aluno.aluno_celular);
+
+  return compactRow({
+    aluno_id: firstPresent(aluno.id, aluno._id, aluno.uuid, aluno.aluno_id),
+    aluno: alunoNome,
+    nome: alunoNome,
+    aluno_login: firstPresent(aluno.login, aluno.usuario, aluno.aluno_login),
+    matricula: firstPresent(aluno.matricula, aluno.codigo, aluno.codigo_aluno),
+    email: firstPresent(responsavelEmail, aluno.email, aluno.aluno_email),
+    aluno_email: firstPresent(aluno.aluno_email, aluno.email),
+    responsavel_email: responsavelEmail,
+    telefone: firstPresent(responsavelTelefone, alunoTelefone),
+    whatsapp: firstPresent(responsavelTelefone, alunoTelefone),
+    aluno_telefone: alunoTelefone,
+    responsavel_telefone: responsavelTelefone,
+    responsavel_nome: responsavelNome,
+    responsavel_cpf: firstPresent(aluno.responsavel_cpf, aluno.cpf_responsavel, responsavel.cpf, responsavel.documento),
+    cpf: firstPresent(aluno.cpf, aluno.cpf_aluno, aluno.cpf_do_aluno, aluno.aluno_cpf),
+    cpf_aluno: firstPresent(aluno.cpf_aluno, aluno.cpf, aluno.cpf_do_aluno, aluno.aluno_cpf),
+    cep: firstPresent(aluno.cep, aluno.zip_code, aluno.postal_code, responsavel.cep, responsavel.zip_code, responsavel.postal_code),
+    rua: firstPresent(aluno.rua, aluno.logradouro, aluno.street_name, responsavel.rua, responsavel.logradouro, responsavel.street_name),
+    numero: firstPresent(aluno.numero, aluno.number, aluno.street_number, responsavel.numero, responsavel.number, responsavel.street_number),
+    bairro: firstPresent(aluno.bairro, aluno.neighborhood, responsavel.bairro, responsavel.neighborhood),
+    cidade: firstPresent(aluno.cidade, aluno.city, responsavel.cidade, responsavel.city),
+    estado: firstPresent(aluno.estado, aluno.uf, aluno.federal_unit, responsavel.estado, responsavel.uf, responsavel.federal_unit),
+  });
 }
 
 export function expirationDate(value: unknown) {
@@ -188,6 +266,8 @@ export async function createMercadoPagoBoleto(
     dbList<Row>("students.json"),
   ]);
   const aluno = findStudent(students, lancamento);
+  const alunoPatch = studentFinancePatch(aluno);
+  const boletoLancamento = { ...lancamento, ...alunoPatch };
   const responsavel = asRow(aluno?.responsavel);
   const token = boletoToken(config);
   if (!token) {
@@ -198,7 +278,7 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const amount = moneyNumber(lancamento.valor_parcela ?? lancamento.valor);
+  const amount = moneyNumber(boletoLancamento.valor_parcela ?? boletoLancamento.valor);
   if (!amount) {
     return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar boleto." };
   }
@@ -210,12 +290,12 @@ export async function createMercadoPagoBoleto(
     aluno?.responsavel_financeiro ||
     aluno?.nome ||
     aluno?.name ||
-    lancamento.aluno ||
-    lancamento.nome ||
-    lancamento.pagador ||
+    boletoLancamento.aluno ||
+    boletoLancamento.nome ||
+    boletoLancamento.pagador ||
     "Aluno Active"
   );
-  const email = payerEmail(lancamento, aluno, config, nome, id);
+  const email = payerEmail(boletoLancamento, aluno, config, nome, id);
   if (!email) {
     return {
       ok: false,
@@ -238,15 +318,15 @@ export async function createMercadoPagoBoleto(
     responsavel.documento,
     responsavel.cnpj,
     aluno?.cnpj,
-    lancamento.cpf,
-    lancamento.cpf_aluno,
-    lancamento.cpf_do_aluno,
-    lancamento.aluno_cpf,
-    lancamento.responsavel_cpf,
-    lancamento.cpf_responsavel,
-    lancamento.documento,
-    lancamento.documento_pagador,
-    lancamento.cnpj,
+    boletoLancamento.cpf,
+    boletoLancamento.cpf_aluno,
+    boletoLancamento.cpf_do_aluno,
+    boletoLancamento.aluno_cpf,
+    boletoLancamento.responsavel_cpf,
+    boletoLancamento.cpf_responsavel,
+    boletoLancamento.documento,
+    boletoLancamento.documento_pagador,
+    boletoLancamento.cnpj,
     config?.payer_document,
     config?.cpf,
     config?.cnpj,
@@ -264,7 +344,7 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const address = payerAddress(lancamento, aluno, sistema);
+  const address = payerAddress(boletoLancamento, aluno, sistema);
   if (!address.zip_code) {
     return {
       ok: false,
@@ -277,7 +357,7 @@ export async function createMercadoPagoBoleto(
   const result = await criarPagamentoBoleto({
     accessToken: token,
     transactionAmount: amount,
-    description: text(lancamento.descricao) || "Mensalidade escolar",
+    description: text(boletoLancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
     notificationUrl,
     idempotencyKey: `active-boleto-${id}`,
@@ -285,8 +365,8 @@ export async function createMercadoPagoBoleto(
       sistema: "active_educacional",
       lancamento_id: id,
       aluno: nome,
-      aluno_id: text(lancamento.aluno_id || aluno?.id),
-      aluno_login: text(lancamento.aluno_login || aluno?.login || aluno?.usuario),
+      aluno_id: text(boletoLancamento.aluno_id || aluno?.id),
+      aluno_login: text(boletoLancamento.aluno_login || aluno?.login || aluno?.usuario),
     },
     payer: {
       email,
@@ -308,26 +388,34 @@ export async function createMercadoPagoBoleto(
   }
 
   const recebimentos = await dbList<Row>("receivables.json");
-  await dbSet("receivables.json", recebimentos.map((item) => text(item.id) === id ? {
-    ...item,
-    mercado_pago_payment_id: result.paymentId,
-    mercado_pago_status: result.status,
-    mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
-    mercado_pago_ticket_url: result.pdfUrl,
-    boleto_url: result.pdfUrl,
-    boleto_pdf_url: result.pdfUrl,
-    boleto_pdf_public_url: "",
-    boleto_pdf_b64: "",
-    boleto_pdf_mime: "",
-    boleto_pdf_nome: "",
-    boleto_linha_digitavel: result.linhaDigitavel,
-    boleto_status: "Mercado Pago",
-    boleto_codigo: result.paymentId || text(item.boleto_codigo),
-    boleto_gerado_em: new Date().toISOString(),
-    status: text(item.status) || "Boleto gerado",
-  } : item));
+  let savedLancamento: Row = boletoLancamento;
+  const updatedRecebimentos = recebimentos.map((item) => {
+    if (text(item.id) !== id) return item;
+    const updated = {
+      ...item,
+      ...alunoPatch,
+      mercado_pago_payment_id: result.paymentId,
+      mercado_pago_status: result.status,
+      mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
+      mercado_pago_ticket_url: result.pdfUrl,
+      boleto_url: result.pdfUrl,
+      boleto_pdf_url: result.pdfUrl,
+      boleto_pdf_public_url: "",
+      boleto_pdf_b64: "",
+      boleto_pdf_mime: "",
+      boleto_pdf_nome: "",
+      boleto_linha_digitavel: result.linhaDigitavel,
+      boleto_status: "Mercado Pago",
+      boleto_codigo: result.paymentId || text(item.boleto_codigo),
+      boleto_gerado_em: new Date().toISOString(),
+      status: text(item.status) || "Boleto gerado",
+    };
+    savedLancamento = updated;
+    return updated;
+  });
+  await dbSet("receivables.json", updatedRecebimentos);
 
-  return { ok: true, url: result.pdfUrl, linha: result.linhaDigitavel, paymentId: result.paymentId };
+  return { ok: true, url: result.pdfUrl, linha: result.linhaDigitavel, paymentId: result.paymentId, lancamento: savedLancamento };
 }
 
 export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<MercadoPagoBoletoResult, { ok: true }>) {
