@@ -18,7 +18,7 @@ export function SyncWhatsappBoletosButton() {
       });
       const data = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
-        alert(String(data.error || "Nao foi possivel sincronizar WhatsApps dos boletos."));
+        alert(String(data.error || "Não foi possível sincronizar WhatsApps dos boletos."));
         return;
       }
 
@@ -28,7 +28,7 @@ export function SyncWhatsappBoletosButton() {
       alert(`${atualizados} boleto(s) atualizado(s).\nSem aluno vinculado: ${semAluno}.\nSem WhatsApp no cadastro: ${semWhatsapp}.`);
       router.refresh();
     } catch {
-      alert("Erro de conexao ao sincronizar WhatsApps dos boletos.");
+      alert("Erro de conexão ao sincronizar WhatsApps dos boletos.");
     } finally {
       setLoading(false);
     }
