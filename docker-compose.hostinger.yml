@@ -62,6 +62,8 @@ services:
       SMTP_TLS: ${SMTP_TLS:-1}
     expose:
       - "3000"
+    volumes:
+      - ./data/backups:/app/data/backups
     networks:
       default: {}
       easypanel:
