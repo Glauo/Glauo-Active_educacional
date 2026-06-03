@@ -762,6 +762,24 @@ function supportAnswer(prompt: string): string {
       "Para evitar erro, mantenha no cadastro do aluno ou responsavel: nome, e-mail valido, CPF/CNPJ e WhatsApp.",
     ].join("\n");
   }
+  if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && (norm.includes("backup") || norm.includes("bkup"))) {
+    return [
+      "O Active faz backup automatico diario quando administrador/coordenador acessa o Financeiro.",
+      "O backup automatico tambem pode ser chamado por /api/backup/auto ou /api/backup/auto?secret=CRON_SECRET.",
+      "Os arquivos automaticos ficam em data/backups/automaticos, com retencao de 30 backups.",
+      "Antes de limpeza de duplicados ou alteracao financeira sensivel, confirme um backup recente.",
+    ].join("\n");
+  }
+  if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && (norm.includes("relatorio") || norm.includes("relatorios"))) {
+    return [
+      "No Financeiro, use Relatorios prontos para ver resumo executivo, caixa mensal, inadimplencia, Mercado Pago, Pix/Boleto e exportar CSV.",
+      "O botao Exportar ainda baixa uma planilha geral de recebimentos e despesas.",
+      "Para conferir inadimplencia operacional, use a aba Inadimplencia e as filas de cobranca inteligente.",
+    ].join("\n");
+  }
+  if ((norm.includes("suporte formal") || norm.includes("documentacao") || norm.includes("documentacao formal"))) {
+    return "O suporte formal do Active esta documentado em docs/SUPORTE_FORMAL_ACTIVE.md. Ele cobre Mercado Pago, Pix, boleto, backup automatico, relatorios, limpeza de duplicados e procedimento seguro de deploy.";
+  }
   if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && norm.includes("boleto")) {
     return [
       "Para gerar boleto real do Mercado Pago: abra Financeiro, localize o recebimento do aluno e clique em Gerar boleto MP.",

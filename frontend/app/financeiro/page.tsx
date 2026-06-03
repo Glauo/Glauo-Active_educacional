@@ -8,6 +8,7 @@ import { FinanceiroCommandCenter, FinanceiroExportButton } from "@/components/fi
 import { SyncWhatsappBoletosButton } from "@/components/sync-whatsapp-boletos-button";
 import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
 import { ensureStudentsMonthlyBilling } from "@/lib/monthly-billing";
+import { ensureAutomaticBackup } from "@/lib/auto-backup";
 
 type Lancamento = { id?: string; aluno?: string; nome?: string; descricao?: string; valor?: number | string; vencimento?: string; data_vencimento?: string; status?: string; situacao?: string; tipo?: string; codigo?: string; [k: string]: unknown };
 const HEAVY_KEYS = ["boleto_pdf_b64", "file_b64", "pdf_b64", "base64", "arquivo_b64", "foto_b64", "imagem_b64", "documento_b64", "anexo_b64"];
@@ -37,6 +38,7 @@ export default async function FinanceiroPage() {
     dbList<Record<string, unknown>>("professor_fechamentos.json"),
   ]);
   if (isAdminOrCoordinator(session)) {
+    await ensureAutomaticBackup("financeiro_page");
     const criadas = await ensureStudentsMonthlyBilling(alunos, session);
     if (criadas.length > 0) {
       recebimentos = await dbListWithoutKeys<Lancamento>("receivables.json", HEAVY_KEYS);

@@ -340,6 +340,150 @@ function BatchBoletosButton() {
   );
 }
 
+function monthKey(row: Row) {
+  const date = dateOf(row);
+  if (!date) return "Sem data";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function paymentMethod(row: Row) {
+  return text(row.forma_pagamento || row.mercado_pago_payment_method || row.banco_destino || "Nao informado");
+}
+
+function RelatoriosProntosButton({ recebimentos, despesas }: { recebimentos: Row[]; despesas: Row[] }) {
+  const [open, setOpen] = useState(false);
+  const today = new Date();
+  const report = useMemo(() => {
+    const recebidos = recebimentos.filter(isPaid);
+    const abertos = recebimentos.filter((row) => !isPaid(row));
+    const vencidos = abertos.filter((row) => daysLate(row) > 0);
+    const pix = recebimentos.filter((row) => paymentMethod(row).toLowerCase().includes("pix") || text(row.pix_ticket_url || row.pix_qr_code));
+    const boletosMp = recebimentos.filter((row) => text(row.mercado_pago_ticket_url || row.boleto_url).toLowerCase().includes("mercadopago"));
+    const despesasAbertas = despesas.filter((row) => !isPaid(row));
+    const despesasPagas = despesas.filter(isPaid);
+
+    const monthly = new Map<string, { mes: string; recebido: number; receber: number; despesa: number; saldo: number }>();
+    function entry(key: string) {
+      if (!monthly.has(key)) monthly.set(key, { mes: key, recebido: 0, receber: 0, despesa: 0, saldo: 0 });
+      return monthly.get(key)!;
+    }
+    for (const row of recebimentos) {
+      const item = entry(monthKey(row));
+      if (isPaid(row)) item.recebido += parseValor(row.valor_pago || row.valor_parcela || row.valor);
+      else item.receber += parseValor(row.valor_parcela || row.valor);
+    }
+    for (const row of despesas) {
+      entry(monthKey(row)).despesa += parseValor(row.valor_pago || row.valor);
+    }
+    const meses = Array.from(monthly.values()).map((item) => ({ ...item, saldo: item.recebido - item.despesa })).sort((a, b) => b.mes.localeCompare(a.mes));
+
+    const inadimplentes = vencidos.reduce((map, row) => {
+      const aluno = alunoOf(row);
+      const current = map.get(aluno) || { aluno, parcelas: 0, total: 0, maior_atraso: 0 };
+      current.parcelas += 1;
+      current.total += parseValor(row.valor_parcela || row.valor);
+      current.maior_atraso = Math.max(current.maior_atraso, daysLate(row));
+      map.set(aluno, current);
+      return map;
+    }, new Map<string, { aluno: string; parcelas: number; total: number; maior_atraso: number }>());
+
+    return {
+      generatedAt: today.toLocaleString("pt-BR"),
+      resumo: {
+        recebido: recebidos.reduce((s, row) => s + parseValor(row.valor_pago || row.valor_parcela || row.valor), 0),
+        aReceber: abertos.reduce((s, row) => s + parseValor(row.valor_parcela || row.valor), 0),
+        vencido: vencidos.reduce((s, row) => s + parseValor(row.valor_parcela || row.valor), 0),
+        despesasAbertas: despesasAbertas.reduce((s, row) => s + parseValor(row.valor), 0),
+        despesasPagas: despesasPagas.reduce((s, row) => s + parseValor(row.valor_pago || row.valor), 0),
+        pix: pix.length,
+        boletosMp: boletosMp.length,
+      },
+      meses,
+      inadimplentes: Array.from(inadimplentes.values()).sort((a, b) => b.total - a.total),
+      mercadoPago: recebimentos
+        .filter((row) => text(row.mercado_pago_payment_id || row.mp_payment_id || row.pix_ticket_url || row.mercado_pago_ticket_url))
+        .map((row) => ({
+          aluno: alunoOf(row),
+          descricao: descricaoOf(row),
+          valor: parseValor(row.valor_pago || row.valor_parcela || row.valor),
+          status: text(row.status || row.situacao || row.mercado_pago_status),
+          metodo: paymentMethod(row),
+          paymentId: text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo),
+        })),
+    };
+  }, [recebimentos, despesas]);
+
+  function exportCsv() {
+    const headers = ["relatorio", "campo_1", "campo_2", "campo_3", "campo_4", "campo_5"];
+    const rows: unknown[][] = [
+      headers,
+      ["resumo", "recebido", report.resumo.recebido, "a_receber", report.resumo.aReceber, ""],
+      ["resumo", "vencido", report.resumo.vencido, "despesas_abertas", report.resumo.despesasAbertas, ""],
+      ...report.meses.map((m) => ["mensal", m.mes, m.recebido, m.receber, m.despesa, m.saldo]),
+      ...report.inadimplentes.map((i) => ["inadimplencia", i.aluno, i.parcelas, i.total, i.maior_atraso, ""]),
+      ...report.mercadoPago.map((mp) => ["mercado_pago", mp.aluno, mp.metodo, mp.status, mp.valor, mp.paymentId]),
+    ];
+    const lines = rows.map((row) => row.map(csvCell).join(";")).join("\n");
+    const blob = new Blob([`\uFEFF${lines}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `relatorios-prontos-active-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <>
+      <button className="btn btn-secondary" type="button" onClick={() => setOpen(true)}>
+        Relatorios prontos
+      </button>
+      {open && (
+        <div className="modal-overlay" onClick={(event) => event.target === event.currentTarget && setOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 1040, width: "94vw", maxHeight: "90vh", overflowY: "auto" }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Relatorios financeiros prontos</div>
+                <div className="modal-subtitle">Resumo executivo, caixa, inadimplencia, Mercado Pago, Pix e boleto. Gerado em {report.generatedAt}.</div>
+              </div>
+              <button className="modal-close" onClick={() => setOpen(false)}>
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+            <div className="modal-body" id="relatorios-prontos-print">
+              <div className="metric-grid metric-grid-4">
+                <ResultPill label="Recebido" value={formatBRL(report.resumo.recebido)} tone="green" />
+                <ResultPill label="A receber" value={formatBRL(report.resumo.aReceber)} tone="gold" />
+                <ResultPill label="Vencido" value={formatBRL(report.resumo.vencido)} tone="red" />
+                <ResultPill label="Despesas abertas" value={formatBRL(report.resumo.despesasAbertas)} tone="blue" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 14, marginTop: 14 }}>
+                <div>
+                  <h3 className="section-title" style={{ fontSize: "1rem" }}>Caixa mensal</h3>
+                  <table className="data-table"><thead><tr><th>Mes</th><th>Recebido</th><th>A receber</th><th>Despesa</th><th>Saldo</th></tr></thead><tbody>{report.meses.slice(0, 12).map((m) => <tr key={m.mes}><td>{m.mes}</td><td>{formatBRL(m.recebido)}</td><td>{formatBRL(m.receber)}</td><td>{formatBRL(m.despesa)}</td><td>{formatBRL(m.saldo)}</td></tr>)}</tbody></table>
+                </div>
+                <div>
+                  <h3 className="section-title" style={{ fontSize: "1rem" }}>Inadimplencia</h3>
+                  <table className="data-table"><thead><tr><th>Aluno</th><th>Parcelas</th><th>Total</th><th>Maior atraso</th></tr></thead><tbody>{report.inadimplentes.slice(0, 12).map((i) => <tr key={i.aluno}><td>{i.aluno}</td><td>{i.parcelas}</td><td>{formatBRL(i.total)}</td><td>{i.maior_atraso} dias</td></tr>)}</tbody></table>
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <h3 className="section-title" style={{ fontSize: "1rem" }}>Mercado Pago</h3>
+                <table className="data-table"><thead><tr><th>Aluno</th><th>Metodo</th><th>Status</th><th>Valor</th><th>ID</th></tr></thead><tbody>{report.mercadoPago.slice(0, 20).map((mp, idx) => <tr key={`${mp.paymentId}_${idx}`}><td>{mp.aluno}</td><td>{mp.metodo}</td><td>{mp.status}</td><td>{formatBRL(mp.valor)}</td><td>{mp.paymentId || "-"}</td></tr>)}</tbody></table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" type="button" onClick={() => window.print()}>Imprimir</button>
+              <button className="btn btn-secondary" type="button" onClick={exportCsv}>Exportar CSV</button>
+              <button className="btn btn-primary" type="button" onClick={() => setOpen(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function csvCell(value: unknown) {
   return `"${text(value).replace(/"/g, '""')}"`;
 }
@@ -529,6 +673,7 @@ export function FinanceiroCommandCenter({
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <BatchBoletosButton />
+              <RelatoriosProntosButton recebimentos={recebimentos} despesas={despesas} />
               <button className="btn btn-secondary" onClick={() => window.print()}>Relatorio rapido</button>
             </div>
           </div>
