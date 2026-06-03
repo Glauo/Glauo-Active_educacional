@@ -69,6 +69,27 @@ function slug(value: unknown) {
   return normalize(value).replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
 }
 
+function sanitizeEmail(value: unknown) {
+  return text(value).replace(/^mailto:/i, "").replace(/\s+/g, "").toLowerCase();
+}
+
+function isValidEmail(value: unknown) {
+  const email = sanitizeEmail(value);
+  return /^[^@<>(),;:\\"\[\]\s]+@[^@<>(),;:\\"\[\]\s]+\.[^@<>(),;:\\"\[\]\s]{2,}$/.test(email);
+}
+
+function firstValidEmail(...values: unknown[]) {
+  for (const value of values) {
+    const email = sanitizeEmail(value);
+    if (isValidEmail(email)) return email;
+  }
+  return "";
+}
+
+function fallbackEmail(payerName: string, id: string) {
+  return `aluno.${slug(payerName) || id.slice(0, 8)}@ativoeducacional.tech`;
+}
+
 function boletoToken(config: Row | null) {
   return text(
     process.env.ACTIVE_MERCADO_PAGO_ACCESS_TOKEN ||
@@ -82,25 +103,24 @@ function boletoToken(config: Row | null) {
 
 function payerEmail(lancamento: Row, aluno: Row | null, config: Row | null, payerName: string, id: string) {
   const responsavel = asRow(aluno?.responsavel);
-  const found = text(
-    aluno?.responsavel_email ||
-    aluno?.email_responsavel ||
-    aluno?.emailResponsavel ||
-    responsavel.email ||
-    responsavel.email_responsavel ||
-    responsavel.emailResponsavel ||
-    aluno?.aluno_email ||
-    aluno?.email ||
-    lancamento.email ||
-    lancamento.aluno_email ||
-    lancamento.responsavel_email ||
-    lancamento.email_responsavel ||
-    config?.payer_email ||
-    process.env.ACTIVE_MERCADO_PAGO_PAYER_EMAIL ||
-    process.env.MERCADO_PAGO_PAYER_EMAIL
+  return firstValidEmail(
+    aluno?.responsavel_email,
+    aluno?.email_responsavel,
+    aluno?.emailResponsavel,
+    responsavel.email,
+    responsavel.email_responsavel,
+    responsavel.emailResponsavel,
+    aluno?.aluno_email,
+    aluno?.email,
+    lancamento.email,
+    lancamento.aluno_email,
+    lancamento.responsavel_email,
+    lancamento.email_responsavel,
+    config?.payer_email,
+    process.env.ACTIVE_MERCADO_PAGO_PAYER_EMAIL,
+    process.env.MERCADO_PAGO_PAYER_EMAIL,
+    fallbackEmail(payerName, id)
   );
-  if (found) return found;
-  return `aluno.${slug(payerName) || id.slice(0, 8)}@ativoeducacional.tech`;
 }
 
 function splitAddress(value: unknown) {
@@ -196,7 +216,8 @@ function studentFinancePatch(aluno: Row | null) {
   const responsavel = asRow(aluno.responsavel);
   const alunoNome = firstPresent(aluno.nome, aluno.name, aluno.nome_completo, aluno.aluno);
   const responsavelNome = firstPresent(aluno.responsavel_nome, aluno.responsavel_financeiro, responsavel.nome, responsavel.name);
-  const responsavelEmail = firstPresent(aluno.responsavel_email, aluno.email_responsavel, responsavel.email, responsavel.email_responsavel);
+  const responsavelEmail = firstValidEmail(aluno.responsavel_email, aluno.email_responsavel, responsavel.email, responsavel.email_responsavel);
+  const alunoEmail = firstValidEmail(aluno.aluno_email, aluno.email);
   const responsavelTelefone = firstPresent(aluno.responsavel_telefone, aluno.telefone_responsavel, aluno.responsavel_celular, responsavel.celular, responsavel.telefone, responsavel.whatsapp);
   const alunoTelefone = firstPresent(aluno.celular, aluno.telefone, aluno.whatsapp, aluno.aluno_telefone, aluno.aluno_celular);
 
@@ -206,8 +227,8 @@ function studentFinancePatch(aluno: Row | null) {
     nome: alunoNome,
     aluno_login: firstPresent(aluno.login, aluno.usuario, aluno.aluno_login),
     matricula: firstPresent(aluno.matricula, aluno.codigo, aluno.codigo_aluno),
-    email: firstPresent(responsavelEmail, aluno.email, aluno.aluno_email),
-    aluno_email: firstPresent(aluno.aluno_email, aluno.email),
+    email: firstPresent(responsavelEmail, alunoEmail),
+    aluno_email: alunoEmail,
     responsavel_email: responsavelEmail,
     telefone: firstPresent(responsavelTelefone, alunoTelefone),
     whatsapp: firstPresent(responsavelTelefone, alunoTelefone),
