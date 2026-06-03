@@ -51,6 +51,22 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function sanitizeEmail(value: unknown) {
+  return text(value).replace(/^mailto:/i, "").replace(/\s+/g, "").toLowerCase();
+}
+
+function isValidEmail(value: unknown) {
+  const email = sanitizeEmail(value);
+  return /^[^@<>(),;:\\"\[\]\s]+@[^@<>(),;:\\"\[\]\s]+\.[^@<>(),;:\\"\[\]\s]{2,}$/.test(email);
+}
+
+function safePayerEmail(value: unknown, externalReference: string) {
+  const email = sanitizeEmail(value);
+  if (isValidEmail(email)) return email;
+  const suffix = text(externalReference).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16).toLowerCase() || "boleto";
+  return `financeiro.${suffix}@ativoeducacional.tech`;
+}
+
 function extractMercadoPagoError(error: unknown) {
   const row = asRecord(error);
   const cause = asRecord(row.cause);
@@ -107,74 +123,46 @@ function extractLinhaDigitavel(raw: Record<string, unknown>) {
 
 /**
  * Cria um pagamento de boleto bancario via Mercado Pago SDK (API v1/payments).
- *
- * Exemplo de uso:
- * ```ts
- * const result = await criarPagamentoBoleto({
- *   accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN!,
- *   transactionAmount: 150,
- *   description: "Mensalidade escolar",
- *   externalReference: "lancamento-123",
- *   dateOfExpiration: "2026-06-10T23:59:00.000-03:00",
- *   payer: {
- *     email: "responsavel@email.com",
- *     firstName: "Maria",
- *     lastName: "Silva",
- *     identificationType: "CPF",
- *     identificationNumber: "12345678901",
- *     address: {
- *       zip_code: "01310100",
- *       street_name: "Av Paulista",
- *       street_number: "1000",
- *       neighborhood: "Bela Vista",
- *       city: "Sao Paulo",
- *       federal_unit: "SP",
- *     },
- *   },
- * });
- *
- * if (result.ok) {
- *   console.log("PDF:", result.pdfUrl);
- *   console.log("Linha digitavel:", result.linhaDigitavel);
- * } else {
- *   console.error(result.message, result.details);
- * }
- * ```
  */
 export async function criarPagamentoBoleto(
   input: CriarPagamentoBoletoInput
 ): Promise<CriarPagamentoBoletoSuccess | CriarPagamentoBoletoError> {
+  const payerEmail = safePayerEmail(input.payer.email, input.externalReference);
+
   try {
     const client = new MercadoPagoConfig({ accessToken: input.accessToken });
     const payment = new Payment(client);
 
     const body: Record<string, unknown> = {
-        transaction_amount: input.transactionAmount,
-        description: input.description,
-        payment_method_id: "bolbradesco",
-        external_reference: input.externalReference,
-        binary_mode: true,
-        statement_descriptor: "ACTIVE EDUCACIONAL",
-        notification_url: input.notificationUrl,
-        metadata: input.metadata,
-        payer: {
-          email: input.payer.email,
-          first_name: input.payer.firstName,
-          last_name: input.payer.lastName,
-          identification: {
-            type: input.payer.identificationType,
-            number: input.payer.identificationNumber,
-          },
-          address: {
-            zip_code: input.payer.address.zip_code,
-            street_name: input.payer.address.street_name,
-            street_number: input.payer.address.street_number,
-            neighborhood: input.payer.address.neighborhood,
-            city: input.payer.address.city,
-            federal_unit: input.payer.address.federal_unit,
-          },
+      transaction_amount: input.transactionAmount,
+      description: input.description,
+      payment_method_id: "bolbradesco",
+      external_reference: input.externalReference,
+      binary_mode: true,
+      statement_descriptor: "ACTIVE EDUCACIONAL",
+      notification_url: input.notificationUrl,
+      metadata: {
+        ...input.metadata,
+        payer_email_usado: payerEmail,
+      },
+      payer: {
+        email: payerEmail,
+        first_name: input.payer.firstName,
+        last_name: input.payer.lastName,
+        identification: {
+          type: input.payer.identificationType,
+          number: input.payer.identificationNumber,
         },
-      };
+        address: {
+          zip_code: input.payer.address.zip_code,
+          street_name: input.payer.address.street_name,
+          street_number: input.payer.address.street_number,
+          neighborhood: input.payer.address.neighborhood,
+          city: input.payer.address.city,
+          federal_unit: input.payer.address.federal_unit,
+        },
+      },
+    };
     if (input.dateOfExpiration) body.date_of_expiration = input.dateOfExpiration;
 
     const response = await payment.create({
@@ -210,7 +198,10 @@ export async function criarPagamentoBoleto(
     return {
       ok: false,
       message: parsed.message,
-      details: parsed.details,
+      details: {
+        ...(asRecord(parsed.details)),
+        payer_email_usado: payerEmail,
+      },
     };
   }
 }
