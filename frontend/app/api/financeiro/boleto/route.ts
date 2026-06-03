@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   const origin = new URL(req.url).origin;
   const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
-  if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
+  if (isMercadoPagoUrl(mercadoPagoUrl)) return NextResponse.redirect(mercadoPagoUrl);
 
   const externalPdf = text(lancamento.boleto_pdf_url);
   if (isMercadoPagoUrl(externalPdf)) return NextResponse.redirect(externalPdf);
