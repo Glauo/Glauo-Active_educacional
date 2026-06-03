@@ -36,6 +36,7 @@ services:
       ACTIVE_MERCADO_PAGO_WEBHOOK_URL: ${ACTIVE_MERCADO_PAGO_WEBHOOK_URL:-https://ativoeducacional.tech/api/financeiro/mercado-pago/webhook}
       ACTIVE_MERCADO_PAGO_WEBHOOK_SECRET: ${ACTIVE_MERCADO_PAGO_WEBHOOK_SECRET:-}
       MERCADO_PAGO_WEBHOOK_SECRET: ${MERCADO_PAGO_WEBHOOK_SECRET:-}
+      CRON_SECRET: ${CRON_SECRET:-ae-cron-boletos-2026}
       ACTIVE_PORTAL_URL: ${ACTIVE_PORTAL_URL:-https://ativoeducacional.tech}
       ALUNO_PORTAL_URL: ${ALUNO_PORTAL_URL:-https://ativoeducacional.tech}
       ACTIVE_WHATSAPP_PROVIDER: ${ACTIVE_WHATSAPP_PROVIDER:-wapi}
