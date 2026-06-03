@@ -1,0 +1,17 @@
+---
+description: Regras do workspace Active Educacional
+alwaysApply: true
+---
+
+Este workspace e somente do Active Educacional.
+
+Obrigatorio:
+- Trabalhar apenas dentro de `c:\Users\Mister Wiz\Desktop\Active_educacional`.
+- Nunca misturar arquivos, regras, dados ou commits de outros projetos.
+- Nao aplicar contexto de DietHealth, Sponte, Mister Wiz Web, CondoJob ou ActiveWiz neste workspace.
+- Antes de editar, conferir o caminho do arquivo.
+- Para boletos, aceitar somente URL real do Mercado Pago como boleto valido.
+- Nunca recriar ou reativar boleto fake/interno `AE-*`.
+- Validar e sanitizar e-mail, CPF/CNPJ, valor e endereco antes de chamar Mercado Pago.
+
+Se a producao mostrar comportamento antigo, verificar deploy/rebuild Docker antes de alterar outro projeto.
