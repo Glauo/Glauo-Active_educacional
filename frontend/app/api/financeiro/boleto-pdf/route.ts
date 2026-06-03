@@ -14,6 +14,11 @@ function sameStudent(sessionUser: string, item: Record<string, unknown>) {
     .includes(user);
 }
 
+function isMercadoPagoUrl(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
@@ -30,7 +35,7 @@ export async function GET(req: NextRequest) {
   }
 
   const mercadoPagoUrl = text(item.mercado_pago_ticket_url || item.boleto_url);
-  if (mercadoPagoUrl.startsWith("http")) return NextResponse.redirect(mercadoPagoUrl);
+  if (isMercadoPagoUrl(mercadoPagoUrl)) return NextResponse.redirect(mercadoPagoUrl);
 
   const importado = req.nextUrl.searchParams.get("importado") === "true";
   if (!importado) {
