@@ -163,7 +163,6 @@ export async function criarPagamentoBoleto(
         },
       },
     };
-    if (input.dateOfExpiration) body.date_of_expiration = input.dateOfExpiration;
 
     const response = await payment.create({
       body,
