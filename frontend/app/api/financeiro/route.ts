@@ -11,6 +11,11 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
+function isMercadoPagoUrl(value: unknown) {
+  const url = text(value).toLowerCase();
+  return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
+}
+
 const HEAVY_KEYS = ["boleto_pdf_b64", "file_b64", "pdf_b64", "base64", "arquivo_b64", "foto_b64", "imagem_b64", "documento_b64", "anexo_b64"];
 
 function isPaid(value: unknown) {
@@ -86,7 +91,8 @@ async function maybeGenerateMercadoPagoBoleto(
   hasImportedPdf: boolean,
 ) {
   if (!wantsBoleto || hasImportedPdf) return { ok: true as const, lancamento };
-  if (text(lancamento.mercado_pago_ticket_url).startsWith("http")) return { ok: true as const, lancamento };
+  const existingUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url || lancamento.boleto_pdf_url);
+  if (isMercadoPagoUrl(existingUrl)) return { ok: true as const, lancamento };
 
   const result = await createMercadoPagoBoleto(lancamento, id, origin);
   if (!result.ok) {
@@ -138,7 +144,6 @@ export async function POST(req: NextRequest) {
     const repaired = ensureFinanceIds(current);
     const lancamentos = repaired.items;
 
-    // Batch create (mensalidades mensais)
     if (Array.isArray(data.items) && (data.items as unknown[]).length > 0) {
       const novos = (data.items as Record<string, unknown>[]).map((item) => ({
         ...item,
@@ -374,7 +379,6 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ ok: true, deleted: deleted.length });
 }
 
-// Bulk baixa — marks multiple payables as Pago in a single atomic write
 export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
