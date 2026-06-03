@@ -85,12 +85,19 @@ async function loadPayment(paymentId: string, token: string) {
 function verifySignature(req: NextRequest, dataId: string, secret: string) {
   const signature = text(req.headers.get("x-signature"));
   const requestId = text(req.headers.get("x-request-id"));
-  if (!secret || !signature || !requestId || !dataId) return false;
+  if (!secret) return { configured: false, valid: true, reason: "secret_not_configured" };
+  if (!signature || !requestId || !dataId) return { configured: true, valid: false, reason: "headers_missing" };
   const { ts, v1 } = parseSignature(signature);
-  if (!ts || !v1) return false;
+  if (!ts || !v1) return { configured: true, valid: false, reason: "signature_malformed" };
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
   const expected = createHmac("sha256", secret).update(manifest).digest("hex");
-  return safeCompareHex(expected, v1);
+  return { configured: true, valid: safeCompareHex(expected, v1), reason: "checked" };
+}
+
+function paymentMetadata(payment: Row) {
+  return payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
+    ? payment.metadata as Row
+    : {};
 }
 
 export async function GET() {
@@ -113,18 +120,22 @@ export async function POST(req: NextRequest) {
   }
 
   const config = await dbGet<Row>("boleto_config.json");
-  const secret = webhookSecret(config);
-  if (!secret) return NextResponse.json({ error: "Assinatura secreta Mercado Pago nao configurada." }, { status: 500 });
-  if (!verifySignature(req, paymentId, secret)) {
-    return NextResponse.json({ error: "Assinatura Mercado Pago invalida." }, { status: 401 });
-  }
-
   const token = boletoToken(config);
   if (!token) return NextResponse.json({ error: "Mercado Pago Access Token nao configurado." }, { status: 500 });
 
+  const signature = verifySignature(req, paymentId, webhookSecret(config));
+  if (signature.configured && !signature.valid) {
+    await audit({
+      acao: "mercado_pago_webhook_assinatura_nao_validada",
+      mercado_pago_payment_id: paymentId,
+      motivo: signature.reason,
+    });
+  }
+
   try {
     const payment = await loadPayment(paymentId, token);
-    const externalReference = text(payment.external_reference);
+    const metadata = paymentMetadata(payment);
+    const externalReference = text(payment.external_reference || metadata.lancamento_id || metadata.external_reference);
     const status = text(payment.status);
     const statusDetail = text(payment.status_detail);
     const paid = isPaidStatus(status);
@@ -151,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     const before = recebimentos[idx];
-    const paymentAmount = moneyNumber(payment.transaction_amount) || moneyNumber((payment.transaction_details as Row | undefined)?.total_paid_amount) || moneyNumber(before.valor);
+    const paymentAmount = moneyNumber(payment.transaction_amount) || moneyNumber((payment.transaction_details as Row | undefined)?.total_paid_amount) || moneyNumber(before.valor_pago) || moneyNumber(before.valor_parcela) || moneyNumber(before.valor);
     const next = {
       ...before,
       mercado_pago_payment_id: paymentId,
@@ -180,23 +191,26 @@ export async function POST(req: NextRequest) {
 
     if (paid && isOpenStatus(before.status)) {
       const receipts = await dbList<Row>("receipts.json");
-      writes.push(dbSet("receipts.json", [
-        ...receipts,
-        {
-          id: crypto.randomUUID(),
-          lancamento_id: text(before.id),
-          tipo: "recebimentos",
-          pessoa: before.aluno || before.nome,
-          descricao: before.descricao || "Mensalidade escolar",
-          valor: before.valor,
-          valor_pago: paymentAmount,
-          forma_pagamento: "Boleto Mercado Pago",
-          data: now,
-          autenticidade: `AE-MP-${paymentId}`,
-          gerado_automaticamente: true,
-          mercado_pago_payment_id: paymentId,
-        },
-      ]));
+      const alreadyReceipt = receipts.some((receipt) => text(receipt.mercado_pago_payment_id) === paymentId || text(receipt.autenticidade) === `AE-MP-${paymentId}`);
+      if (!alreadyReceipt) {
+        writes.push(dbSet("receipts.json", [
+          ...receipts,
+          {
+            id: crypto.randomUUID(),
+            lancamento_id: text(before.id),
+            tipo: "recebimentos",
+            pessoa: before.aluno || before.nome,
+            descricao: before.descricao || "Mensalidade escolar",
+            valor: before.valor,
+            valor_pago: paymentAmount,
+            forma_pagamento: "Boleto Mercado Pago",
+            data: now,
+            autenticidade: `AE-MP-${paymentId}`,
+            gerado_automaticamente: true,
+            mercado_pago_payment_id: paymentId,
+          },
+        ]));
+      }
     }
 
     await Promise.all(writes);
@@ -205,8 +219,10 @@ export async function POST(req: NextRequest) {
       tipo: "recebimentos",
       lancamento_id: before.id,
       mercado_pago_payment_id: paymentId,
+      external_reference: externalReference,
       status,
       status_detail: statusDetail,
+      assinatura_webhook_validada: signature.valid,
       antes: before,
       depois: next,
     });
@@ -214,6 +230,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, matched: true, paid, status });
   } catch (err) {
     console.error("[mercado-pago webhook]", err);
+    await audit({
+      acao: "mercado_pago_webhook_erro",
+      mercado_pago_payment_id: paymentId,
+      erro: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: "Erro ao processar webhook Mercado Pago." }, { status: 500 });
   }
 }
