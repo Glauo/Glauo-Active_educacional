@@ -754,15 +754,30 @@ function humanFallback(): string {
 
 function supportAnswer(prompt: string): string {
   const norm = normalize(prompt);
+  if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && norm.includes("pix")) {
+    return [
+      "Para gerar PIX real do Mercado Pago: abra Financeiro, localize o recebimento do aluno e clique em Gerar Pix MP.",
+      "Depois de gerado, o botao Abrir Pix mostra o link/QR Code do Mercado Pago. Nao existe PIX interno ou fake: se o Mercado Pago recusar, o sistema mostra o erro.",
+      "A baixa automatica usa o webhook do Mercado Pago em /api/financeiro/mercado-pago/webhook e registra a forma de pagamento como Pix Mercado Pago quando o pagamento for aprovado.",
+      "Para evitar erro, mantenha no cadastro do aluno ou responsavel: nome, e-mail valido, CPF/CNPJ e WhatsApp.",
+    ].join("\n");
+  }
   if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && norm.includes("boleto")) {
     return [
-      "Para anexar boleto em PDF: abra Financeiro > Importar boleto PDF, selecione o aluno, escolha o arquivo e salve.",
-      "Tambem da para abrir Alunos > ficha do aluno > Financeiro > Anexar boleto PDF; nesse caminho o aluno ja vem preenchido.",
-      "O vencimento e opcional no anexo: se o PDF ja trouxer a data, voce pode salvar e ajustar depois. O boleto fica no financeiro, na ficha do aluno e no painel do aluno.",
+      "Para gerar boleto real do Mercado Pago: abra Financeiro, localize o recebimento do aluno e clique em Gerar boleto MP.",
+      "O sistema usa os dados do cadastro do aluno/responsavel, incluindo nome, e-mail valido, CPF/CNPJ, WhatsApp e endereco quando disponivel.",
+      "Boletos internos AE-* ou URLs que nao sao Mercado Pago nao contam como boleto MP valido. Se existir boleto antigo/fake, gere novamente pelo botao Gerar boleto MP.",
+      "A baixa automatica usa o webhook do Mercado Pago em /api/financeiro/mercado-pago/webhook. Quando o pagamento for aprovado, o lancamento muda para Pago.",
+      "Para anexar boleto em PDF manual: abra Financeiro > Importar boleto PDF, selecione o aluno, escolha o arquivo e salve.",
     ].join("\n");
   }
   if ((norm.includes("suporte") || norm.includes("ajuda") || norm.includes("como")) && norm.includes("financeiro")) {
-    return "No Financeiro voce pode criar recebimentos, anexar boleto PDF, enviar cobranca, dar baixa e, como administrador, tirar baixa feita por engano com auditoria.";
+    return [
+      "No Financeiro voce pode criar recebimentos, gerar Boleto MP, gerar Pix MP, anexar boleto PDF manual, enviar cobranca, dar baixa e estornar baixa com auditoria de administrador.",
+      "Boleto MP e Pix MP usam o mesmo Access Token e webhook do Mercado Pago configurados em Configuracoes.",
+      "A baixa automatica acontece quando o Mercado Pago envia o evento Pagamentos/payments para o webhook do Active.",
+      "Duplicados em aberto podem ser limpos com backup antes da remocao; lancamentos pagos devem ser preservados ou removidos somente com confirmacao.",
+    ].join("\n");
   }
   return "";
 }
