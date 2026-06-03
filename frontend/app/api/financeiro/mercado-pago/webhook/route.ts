@@ -100,6 +100,17 @@ function paymentMetadata(payment: Row) {
     : {};
 }
 
+function paymentMethodId(payment: Row) {
+  const method = payment.payment_method && typeof payment.payment_method === "object" && !Array.isArray(payment.payment_method)
+    ? payment.payment_method as Row
+    : {};
+  return lower(payment.payment_method_id || method.id);
+}
+
+function formaPagamentoMercadoPago(payment: Row) {
+  return paymentMethodId(payment) === "pix" ? "Pix Mercado Pago" : "Boleto Mercado Pago";
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, endpoint: "mercado-pago-webhook" });
 }
@@ -139,6 +150,7 @@ export async function POST(req: NextRequest) {
     const status = text(payment.status);
     const statusDetail = text(payment.status_detail);
     const paid = isPaidStatus(status);
+    const formaPagamento = formaPagamentoMercadoPago(payment);
     const now = new Date().toISOString();
     const today = now.slice(0, 10);
 
@@ -171,13 +183,14 @@ export async function POST(req: NextRequest) {
       mp_status: status,
       mercado_pago_detail: statusDetail,
       mp_status_detail: statusDetail,
+      mercado_pago_payment_method: paymentMethodId(payment),
       mercado_pago_webhook_at: now,
       ...(paid ? {
         status: "Pago",
         situacao: "Pago",
         data_baixa: text(before.data_baixa) || today,
         valor_pago: text(before.valor_pago) || paymentAmount,
-        forma_pagamento: "Boleto Mercado Pago",
+        forma_pagamento: formaPagamento,
         baixado_por: text(before.baixado_por) || "Mercado Pago",
       } : {
         status: isOpenStatus(before.status) ? before.status : "Pendente",
@@ -203,7 +216,7 @@ export async function POST(req: NextRequest) {
             descricao: before.descricao || "Mensalidade escolar",
             valor: before.valor,
             valor_pago: paymentAmount,
-            forma_pagamento: "Boleto Mercado Pago",
+            forma_pagamento: formaPagamento,
             data: now,
             autenticidade: `AE-MP-${paymentId}`,
             gerado_automaticamente: true,

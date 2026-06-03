@@ -187,6 +187,14 @@ function boletoLink(lancamento: Lancamento) {
   return id ? absoluteUrl(`/api/financeiro/boleto?id=${encodeURIComponent(id)}`) : "";
 }
 
+function pixHref(lancamento: Lancamento) {
+  const link = String(lancamento.pix_ticket_url || "").trim();
+  if (link.startsWith("http")) return link;
+  const id = String(lancamento.id || "");
+  if (id && String(lancamento.pix_qr_code || "").trim()) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
+  return "";
+}
+
 function financePhone(lancamento: Lancamento) {
   return String(
     lancamento.telefone ||
@@ -349,6 +357,44 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
       {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{String(lancamento.mercado_pago_ticket_url || "").startsWith("http") ? "Abrir boleto" : "Abrir PDF"}</a>}
       <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar boleto MP"}</button>
       <BoletoWhatsAppButton lancamento={lancamento} />
+    </>
+  );
+}
+
+function PixBtn({ lancamento }: { lancamento: Lancamento }) {
+  const [loading, setLoading] = useState(false);
+  const id = String(lancamento.id || "");
+  const href = pixHref(lancamento);
+
+  async function gerar() {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/financeiro/pix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        alert([
+          String(data.title || "Erro ao gerar PIX Mercado Pago"),
+          String(data.error || "Nao foi possivel gerar o PIX."),
+          String(data.detail || ""),
+        ].filter(Boolean).join("\n"));
+        return;
+      }
+      const next = (data.lancamento || lancamento) as Lancamento;
+      window.open(pixHref(next) || `/api/financeiro/pix?id=${encodeURIComponent(id)}`, "_blank");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      {href && <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">Abrir Pix</a>}
+      <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar Pix MP"}</button>
     </>
   );
 }
@@ -802,7 +848,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                           <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "—" ? fmtDate(venc) : "—"}{atrasado && " ⚠"}</span></td>
 	                          <td><span style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{formatBRL(valorParcela(r))}</span></td>
                           <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
-                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
+                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
                         </tr>
                       );
                     })}
@@ -1275,7 +1321,7 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
                           <td style={{ fontWeight: 800, color: "var(--red-700)" }}>{formatBRL(valorParcela(r))}</td>
                           <td><span className={`badge badge-${faixa(r.dias as number)}`}><span className="badge-dot" />{r.dias as number} dias</span></td>
                           <td>{String(extra(r, "responsavel") || "—")}</td>
-                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><AutoWhatsAppButton phone={extra(r, "telefone") || extra(r, "whatsapp")} message={msg} /><BoletoBtn lancamento={r} /><BaixaBtn lancamento={r} tipo="recebimentos" /></div></td>
+                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><AutoWhatsAppButton phone={extra(r, "telefone") || extra(r, "whatsapp")} message={msg} /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><BaixaBtn lancamento={r} tipo="recebimentos" /></div></td>
                         </tr>
                       );
                     })}

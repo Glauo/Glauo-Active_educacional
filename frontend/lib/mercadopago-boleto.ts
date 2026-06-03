@@ -1,10 +1,15 @@
 import { dbGet, dbList, dbSet } from "@/lib/db";
 import { criarPagamentoBoleto, resolveIdentification } from "@/lib/criar-pagamento-boleto";
+import { criarPagamentoPix } from "@/lib/criar-pagamento-pix";
 
 type Row = Record<string, unknown>;
 
 export type MercadoPagoBoletoResult =
   | { ok: true; url: string; linha: string; paymentId: string; lancamento?: Row }
+  | { ok: false; title: string; message: string; detail?: string };
+
+export type MercadoPagoPixResult =
+  | { ok: true; url: string; qrCode: string; qrCodeBase64: string; paymentId: string; lancamento?: Row }
   | { ok: false; title: string; message: string; detail?: string };
 
 function text(value: unknown) {
@@ -437,6 +442,155 @@ export async function createMercadoPagoBoleto(
   await dbSet("receivables.json", updatedRecebimentos);
 
   return { ok: true, url: result.pdfUrl, linha: result.linhaDigitavel, paymentId: result.paymentId, lancamento: savedLancamento };
+}
+
+export async function createMercadoPagoPix(
+  lancamento: Row,
+  id: string,
+  origin: string
+): Promise<MercadoPagoPixResult> {
+  const [config, sistema, students] = await Promise.all([
+    dbGet<Row>("boleto_config.json"),
+    dbGet<Row>("sistema_config.json"),
+    dbList<Row>("students.json"),
+  ]);
+  const aluno = findStudent(students, lancamento);
+  const alunoPatch = studentFinancePatch(aluno);
+  const pixLancamento = { ...lancamento, ...alunoPatch };
+  const responsavel = asRow(aluno?.responsavel);
+  const token = boletoToken(config);
+  if (!token) {
+    return {
+      ok: false,
+      title: "Mercado Pago nao configurado",
+      message: "Configure ACTIVE_MERCADO_PAGO_ACCESS_TOKEN ou MERCADO_PAGO_ACCESS_TOKEN no ambiente do Node.js, ou informe o Access Token nas configuracoes.",
+    };
+  }
+
+  const amount = moneyNumber(pixLancamento.valor_parcela ?? pixLancamento.valor);
+  if (!amount) {
+    return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar PIX." };
+  }
+
+  const nome = text(
+    responsavel.nome ||
+    responsavel.name ||
+    aluno?.responsavel_nome ||
+    aluno?.responsavel_financeiro ||
+    aluno?.nome ||
+    aluno?.name ||
+    pixLancamento.aluno ||
+    pixLancamento.nome ||
+    pixLancamento.pagador ||
+    "Aluno Active"
+  );
+  const email = payerEmail(pixLancamento, aluno, config, nome, id);
+  const documento = firstValidDocument(
+    aluno?.cpf_do_aluno,
+    aluno?.cpf_aluno,
+    aluno?.cpf,
+    aluno?.aluno_cpf,
+    aluno?.responsavel_cpf,
+    aluno?.cpf_responsavel,
+    aluno?.documento,
+    aluno?.documento_pagador,
+    responsavel.cpf,
+    responsavel.cpf_responsavel,
+    responsavel.documento,
+    responsavel.cnpj,
+    aluno?.cnpj,
+    pixLancamento.cpf,
+    pixLancamento.cpf_aluno,
+    pixLancamento.cpf_do_aluno,
+    pixLancamento.aluno_cpf,
+    pixLancamento.responsavel_cpf,
+    pixLancamento.cpf_responsavel,
+    pixLancamento.documento,
+    pixLancamento.documento_pagador,
+    pixLancamento.cnpj,
+    config?.payer_document,
+    config?.cpf,
+    config?.cnpj,
+    sistema?.cnpj,
+    sistema?.cpf,
+    process.env.ACTIVE_MERCADO_PAGO_PAYER_DOCUMENT,
+    process.env.MERCADO_PAGO_PAYER_DOCUMENT
+  );
+  const identification = resolveIdentification(documento);
+  if (!identification) {
+    return {
+      ok: false,
+      title: "CPF/CNPJ obrigatorio",
+      message: "O Mercado Pago exige CPF (11 digitos) ou CNPJ (14 digitos) do pagador para gerar PIX.",
+    };
+  }
+
+  const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
+  const result = await criarPagamentoPix({
+    accessToken: token,
+    transactionAmount: amount,
+    description: text(pixLancamento.descricao) || "Mensalidade escolar",
+    externalReference: id,
+    notificationUrl,
+    idempotencyKey: `active-pix-${id}`,
+    metadata: {
+      sistema: "active_educacional",
+      lancamento_id: id,
+      aluno: nome,
+      aluno_id: text(pixLancamento.aluno_id || aluno?.id),
+      aluno_login: text(pixLancamento.aluno_login || aluno?.login || aluno?.usuario),
+      meio_pagamento: "pix",
+    },
+    payer: {
+      email,
+      firstName: firstName(nome),
+      lastName: lastName(nome),
+      identificationType: identification.type,
+      identificationNumber: identification.number,
+    },
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      title: "Falha ao gerar PIX Mercado Pago",
+      message: result.message,
+      detail: formatMercadoPagoErrorDetail(result.details),
+    };
+  }
+
+  const recebimentos = await dbList<Row>("receivables.json");
+  let savedLancamento: Row = pixLancamento;
+  const updatedRecebimentos = recebimentos.map((item) => {
+    if (text(item.id) !== id) return item;
+    const updated = {
+      ...item,
+      ...alunoPatch,
+      mercado_pago_payment_id: result.paymentId,
+      mercado_pago_status: result.status,
+      mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
+      mercado_pago_payment_method: "pix",
+      pix_ticket_url: result.ticketUrl,
+      pix_qr_code: result.qrCode,
+      pix_qr_code_base64: result.qrCodeBase64,
+      pix_status: "Mercado Pago",
+      pix_codigo: result.paymentId || text(item.pix_codigo),
+      pix_gerado_em: new Date().toISOString(),
+      status: text(item.status) || "PIX gerado",
+    };
+    savedLancamento = updated;
+    return updated;
+  });
+  await dbSet("receivables.json", updatedRecebimentos);
+
+  return {
+    ok: true,
+    url: result.ticketUrl,
+    qrCode: result.qrCode,
+    qrCodeBase64: result.qrCodeBase64,
+    paymentId: result.paymentId,
+    lancamento: savedLancamento,
+  };
 }
 
 export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<MercadoPagoBoletoResult, { ok: true }>) {
