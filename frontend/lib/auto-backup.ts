@@ -1,4 +1,4 @@
-import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dbGet, dbList, dbSet } from "@/lib/db";
 
@@ -79,7 +79,9 @@ export async function ensureAutomaticBackup(reason = "auto") {
     String(item.created_at || "").startsWith(today)
   );
   if (existing) {
-    return { ok: true, created: false, file: String(existing.arquivo || ""), audit: existing };
+    const file = String(existing.arquivo || "");
+    const exists = file ? await stat(file).then(() => true).catch(() => false) : false;
+    if (exists) return { ok: true, created: false, file, audit: existing };
   }
 
   const data: Row = {};
