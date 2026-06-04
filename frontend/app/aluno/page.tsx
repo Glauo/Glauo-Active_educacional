@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { StudentPortalClient } from "@/components/student-portal-client";
 import { isHomeworkActivity, normalizeList, studentMatchesTarget, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
 import { hasWorkbookStudentTarget, releasedWorkbookLessons, studentWorkbookBook, workbookLibraryBooks } from "@/lib/workbook-lessons";
+import { findStudentForSession, sameStudentFinanceEntry } from "@/lib/student-finance";
 
 type Aluno = { id?: string; nome?: string; name?: string; login?: string; turma?: string; classe?: string; livro?: string; book?: string; status?: string; [k: string]: unknown };
 type Desafio = { id?: string; titulo?: string; title?: string; turma?: string; pontos?: number | string; status?: string; [k: string]: unknown };
@@ -16,24 +17,6 @@ const HEAVY_KEYS = ["boleto_pdf_b64", "file_b64", "pdf_b64", "base64", "arquivo_
 
 function lower(value: unknown) {
   return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-}
-
-function sameStudentInvoice(row: Recebimento, aluno: Aluno | undefined, session: { usuario: string; pessoa: string }) {
-  const possible = [
-    row.aluno_login,
-    row.aluno_id,
-    row.aluno,
-    row.nome,
-  ].map(lower).filter(Boolean);
-  const studentKeys = [
-    session.usuario,
-    session.pessoa,
-    aluno?.id,
-    aluno?.login,
-    aluno?.nome,
-    aluno?.name,
-  ].map(lower).filter(Boolean);
-  return possible.some((item) => studentKeys.includes(item));
 }
 
 function dueDateValue(value: unknown) {
@@ -120,7 +103,7 @@ export default async function AlunoHomePage() {
     dbList<BibliotecaItem>("videos.json"),
   ]);
 
-  const meuPerfil = alunos.find((a) => lower(a.login) === lower(session.usuario) || lower(a.nome || a.name) === lower(session.pessoa));
+  const meuPerfil = findStudentForSession(alunos, session);
   const minhaTurma = text(meuPerfil?.turma || meuPerfil?.classe || session.unit);
   const sessionLite = { usuario: session.usuario, pessoa: session.pessoa || session.usuario, unit: session.unit };
 
@@ -150,7 +133,7 @@ export default async function AlunoHomePage() {
 
   const minhasNotas = notas.filter((n) => lower(n.aluno) === lower(session.pessoa) || lower(n.aluno_login) === lower(session.usuario));
   const minhasFaturas = recebimentos
-    .filter((r) => sameStudentInvoice(r, meuPerfil, sessionLite))
+    .filter((r) => sameStudentFinanceEntry(r, meuPerfil, sessionLite))
     .sort((a, b) => dueDateValue(a.vencimento || a.data_vencimento) - dueDateValue(b.vencimento || b.data_vencimento));
   const meusDesafios = desafios.filter((d) => visibleChallenge(d, session, meuPerfil));
   const minhasConclusoes = conclusoes.filter((c) => lower(c.aluno) === lower(session.usuario) || lower(c.aluno) === lower(session.pessoa));
