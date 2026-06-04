@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList } from "@/lib/db";
+import { findStudentForSession, sameStudentFinanceEntry } from "@/lib/student-finance";
 
 function text(value: unknown) {
   return String(value || "").trim();
-}
-
-function sameStudent(sessionUser: string, item: Record<string, unknown>) {
-  const user = sessionUser.trim().toLowerCase();
-  return [item.aluno_login, item.login, item.usuario, item.aluno_id]
-    .map((v) => text(v).toLowerCase())
-    .filter(Boolean)
-    .includes(user);
 }
 
 function isMercadoPagoUrl(value: unknown) {
@@ -30,8 +23,11 @@ export async function GET(req: NextRequest) {
   const item = lancamentos.find((row) => text(row.id) === id);
   if (!item) return NextResponse.json({ error: "Boleto nao encontrado." }, { status: 404 });
 
-  if (session.perfil.toLowerCase().includes("aluno") && !sameStudent(session.usuario, item)) {
-    return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+  if (session.perfil.toLowerCase().includes("aluno")) {
+    const aluno = findStudentForSession(await dbList<Record<string, unknown>>("students.json"), session);
+    if (!sameStudentFinanceEntry(item, aluno, session)) {
+      return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+    }
   }
 
   const mercadoPagoUrl = text(item.mercado_pago_ticket_url || item.boleto_url);

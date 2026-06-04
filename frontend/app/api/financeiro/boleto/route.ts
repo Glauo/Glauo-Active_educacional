@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList } from "@/lib/db";
 import { createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
+import { findStudentForSession, sameStudentFinanceEntry } from "@/lib/student-finance";
 
 type Row = Record<string, unknown>;
 
@@ -38,8 +39,11 @@ export async function GET(req: NextRequest) {
   const recebimentos = await dbList<Row>("receivables.json");
   const lancamento = recebimentos.find((r) => text(r.id) === id);
   if (!lancamento) return NextResponse.json({ error: "Boleto nao encontrado" }, { status: 404 });
-  if (session.perfil === "Aluno" && text(lancamento.aluno || lancamento.nome) !== session.pessoa) {
-    return NextResponse.json({ error: "Nao autorizado" }, { status: 403 });
+  if (session.perfil.toLowerCase().includes("aluno")) {
+    const aluno = findStudentForSession(await dbList<Row>("students.json"), session);
+    if (!sameStudentFinanceEntry(lancamento, aluno, session)) {
+      return NextResponse.json({ error: "Nao autorizado" }, { status: 403 });
+    }
   }
 
   const origin = new URL(req.url).origin;
