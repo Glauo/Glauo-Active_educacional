@@ -88,7 +88,7 @@ function pixHref(row: Row) {
   const id = text(row.id);
   const link = text(row.pix_ticket_url);
   if (link.startsWith("http")) return link;
-  if (id && text(row.pix_qr_code || row.pix_status || row.pix_codigo)) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
+  if (id && isOpenInvoice(row)) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
   return "";
 }
 

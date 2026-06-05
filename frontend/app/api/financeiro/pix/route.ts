@@ -9,6 +9,28 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
+function lower(value: unknown) {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function isStudentSession(session: { perfil?: string }) {
+  return lower(session.perfil).includes("aluno");
+}
+
+function sameStudentInvoice(row: Row, session: { usuario?: string; pessoa?: string }) {
+  const invoiceKeys = [
+    row.aluno_login,
+    row.aluno_id,
+    row.aluno,
+    row.nome,
+  ].map(lower).filter(Boolean);
+  const sessionKeys = [
+    session.usuario,
+    session.pessoa,
+  ].map(lower).filter(Boolean);
+  return invoiceKeys.some((item) => sessionKeys.includes(item));
+}
+
 function errorHtml(title: string, message: string, detail?: string) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
     body{font-family:Arial,sans-serif;background:#f8fafc;color:#172033;margin:0;padding:40px}.box{max-width:760px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 18px 45px rgba(15,23,42,.08)}
@@ -44,7 +66,7 @@ export async function GET(req: NextRequest) {
 
   const lancamento = await findLancamento(id);
   if (!lancamento) return NextResponse.json({ error: "Lancamento nao encontrado" }, { status: 404 });
-  if (session.perfil === "Aluno" && text(lancamento.aluno || lancamento.nome) !== session.pessoa) {
+  if (isStudentSession(session) && !sameStudentInvoice(lancamento, session)) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 403 });
   }
 
