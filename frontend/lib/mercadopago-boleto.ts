@@ -12,6 +12,10 @@ export type MercadoPagoPixResult =
   | { ok: true; url: string; qrCode: string; qrCodeBase64: string; paymentId: string; lancamento?: Row }
   | { ok: false; title: string; message: string; detail?: string };
 
+type MercadoPagoCreateOptions = {
+  forceNewPayment?: boolean;
+};
+
 function text(value: unknown) {
   return String(value || "").trim();
 }
@@ -263,7 +267,8 @@ function formatMercadoPagoErrorDetail(details: unknown) {
 export async function createMercadoPagoBoleto(
   lancamento: Row,
   id: string,
-  origin: string
+  origin: string,
+  options: MercadoPagoCreateOptions = {}
 ): Promise<MercadoPagoBoletoResult> {
   const [config, sistema, students] = await Promise.all([
     dbGet<Row>("boleto_config.json"),
@@ -359,19 +364,23 @@ export async function createMercadoPagoBoleto(
   }
 
   const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
+  const idempotencyKey = options.forceNewPayment
+    ? `active-boleto-${id}-${Date.now()}`
+    : `active-boleto-${id}`;
   const result = await criarPagamentoBoleto({
     accessToken: token,
     transactionAmount: amount,
     description: text(boletoLancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
     notificationUrl,
-    idempotencyKey: `active-boleto-${id}`,
+    idempotencyKey,
     metadata: {
       sistema: "active_educacional",
       lancamento_id: id,
       aluno: nome,
       aluno_id: text(boletoLancamento.aluno_id || aluno?.id),
       aluno_login: text(boletoLancamento.aluno_login || aluno?.login || aluno?.usuario),
+      regenerated_at: options.forceNewPayment ? new Date().toISOString() : "",
     },
     payer: {
       email,

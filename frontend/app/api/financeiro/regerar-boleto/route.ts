@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const mpResult = await createMercadoPagoBoleto(lanc, id, origin);
+    const mpResult = await createMercadoPagoBoleto(lanc, id, origin, { forceNewPayment: true });
 
     if (mpResult.ok) {
       updatedMap.set(id, {

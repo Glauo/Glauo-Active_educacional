@@ -54,6 +54,7 @@ function statusBadge(s: string) {
   const l = s.toLowerCase();
   if (l.includes("pago") || l.includes("baixado") || l.includes("liquidado")) return "success";
   if (l.includes("atraso") || l.includes("vencido")) return "danger";
+  if (l.includes("recus") || l.includes("cancel")) return "danger";
   if (l.includes("pendent") || l.includes("boleto")) return "warning";
   return "neutral";
 }
@@ -193,6 +194,18 @@ function pixHref(lancamento: Lancamento) {
   const id = String(lancamento.id || "");
   if (id && String(lancamento.pix_qr_code || "").trim()) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
   return "";
+}
+
+function canOpenMercadoPagoCharge(lancamento: Lancamento) {
+  const status = String(
+    lancamento.payment_status ||
+    lancamento.mercado_pago_status ||
+    lancamento.mp_status ||
+    lancamento.status ||
+    lancamento.situacao ||
+    ""
+  ).toLowerCase();
+  return status !== "rejected" && status !== "cancelled" && !status.includes("recus") && !status.includes("cancel");
 }
 
 function financePhone(lancamento: Lancamento) {
@@ -339,7 +352,7 @@ function groupByMes(items: Lancamento[]): { key: string; label: string; items: L
 function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
-  const pdfHref = boletoPdfHref(lancamento);
+  const pdfHref = canOpenMercadoPagoCharge(lancamento) ? boletoPdfHref(lancamento) : "";
   const hasMercadoPagoHistory = Boolean(String(
     lancamento.mercado_pago_payment_id ||
     lancamento.mp_payment_id ||
@@ -384,7 +397,7 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
 function PixBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
-  const href = pixHref(lancamento);
+  const href = canOpenMercadoPagoCharge(lancamento) ? pixHref(lancamento) : "";
 
   async function gerar() {
     if (!id) return;
