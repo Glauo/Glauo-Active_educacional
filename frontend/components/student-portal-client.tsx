@@ -77,8 +77,18 @@ function isOpenInvoice(row: Row) {
 
 function boletoHref(row: Row) {
   const id = text(row.id);
+  const mp = text(row.mercado_pago_ticket_url || row.boleto_url);
+  if (mp.startsWith("http")) return mp;
   if (text(row.boleto_pdf_url)) return text(row.boleto_pdf_url);
   if (id && text(row.boleto_status || row.gerar_boleto)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
+  return "";
+}
+
+function pixHref(row: Row) {
+  const id = text(row.id);
+  const link = text(row.pix_ticket_url);
+  if (link.startsWith("http")) return link;
+  if (id && text(row.pix_qr_code || row.pix_status || row.pix_codigo)) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
   return "";
 }
 
@@ -309,7 +319,7 @@ export function StudentPortalClient({ session, perfil, muralPosts, licoes, entre
 
         {tab === "agenda" && <section className="student-panel"><div className="student-section-head"><div><span>Agenda</span><h2>Aulas e eventos</h2></div></div>{agenda.length ? <table className="data-table"><thead><tr><th>Data</th><th>Horário</th><th>Aula/evento</th><th>Professor</th></tr></thead><tbody>{agenda.map((a, i) => <tr key={text(a.id) || i}><td>{dateLabel(a.data || a.date)}</td><td>{text(a.horario || a.hora || "-")}</td><td>{text(a.titulo || a.descricao || "Aula")}</td><td>{text(a.professor || "-")}</td></tr>)}</tbody></table> : <Empty title="Sem agenda" desc="Nenhuma aula ou evento encontrado para sua turma." />}</section>}
 
-        {tab === "financeiro" && <section className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Boletos e mensalidades</h2></div></div>{faturas.length ? <table className="data-table"><thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Boleto</th></tr></thead><tbody>{faturas.map((f, i) => { const href = boletoHref(f); return <tr key={text(f.id) || i}><td>{text(f.descricao || f.categoria || "Mensalidade")}</td><td>{dateLabel(f.vencimento || f.data_vencimento)}</td><td>{money(valueOfInstallment(f))}</td><td><span className={`badge badge-${statusBadge(f.status || f.situacao)}`}><span className="badge-dot" />{text(f.status || "Pendente")}</span></td><td>{href ? <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">Baixar boleto</a> : "-"}</td></tr>; })}</tbody></table> : <Empty title="Sem faturas" desc="Nenhuma mensalidade encontrada para seu cadastro." />}</section>}
+        {tab === "financeiro" && <section className="student-panel"><div className="student-section-head"><div><span>Financeiro</span><h2>Pagamentos e mensalidades</h2></div></div>{faturas.length ? <table className="data-table"><thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Pagamento</th></tr></thead><tbody>{faturas.map((f, i) => { const boleto = boletoHref(f); const pix = pixHref(f); return <tr key={text(f.id) || i}><td>{text(f.descricao || f.categoria || "Mensalidade")}</td><td>{dateLabel(f.vencimento || f.data_vencimento)}</td><td>{money(valueOfInstallment(f))}</td><td><span className={`badge badge-${statusBadge(f.status || f.situacao)}`}><span className="badge-dot" />{text(f.status || "Pendente")}</span></td><td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{pix && <a className="btn btn-secondary btn-sm" href={pix} target="_blank" rel="noreferrer">Pagar Pix</a>}{boleto && <a className="btn btn-secondary btn-sm" href={boleto} target="_blank" rel="noreferrer">Boleto</a>}{!pix && !boleto && "-"}</div></td></tr>; })}</tbody></table> : <Empty title="Sem faturas" desc="Nenhuma mensalidade encontrada para seu cadastro." />}</section>}
 
         {tab === "notas" && <section className="student-panel"><div className="student-section-head"><div><span>Boletim</span><h2>Notas e frequência</h2></div><span className="badge badge-warning">{faltas} faltas</span></div>{notas.length ? <table className="data-table"><thead><tr><th>Atividade</th><th>Nota</th><th>Status</th><th>Data</th></tr></thead><tbody>{notas.map((n, i) => <tr key={text(n.id) || i}><td>{text(n.titulo || n.desafio || "Atividade")}</td><td><span className="badge badge-gold">{Number(n.nota || n.score || 0).toFixed(1)}</span></td><td>{text(n.status || "Corrigido")}</td><td>{dateLabel(n.data || n.created_at)}</td></tr>)}</tbody></table> : <Empty title="Sem notas publicadas" desc="As notas aparecem após correção do professor." />}</section>}
 
