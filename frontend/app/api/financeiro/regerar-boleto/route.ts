@@ -75,6 +75,11 @@ export async function POST(req: NextRequest) {
     const mpResult = await createMercadoPagoBoleto(lanc, id, origin, { forceNewPayment: true });
 
     if (mpResult.ok) {
+      const previousPaymentId = text(
+        lanc.mercado_pago_payment_id ||
+        lanc.mp_payment_id ||
+        lanc.boleto_codigo
+      );
       updatedMap.set(id, {
         ...(mpResult.lancamento || lanc),
         boleto_status: "Gerado MP",
@@ -84,6 +89,8 @@ export async function POST(req: NextRequest) {
         boleto_codigo: mpResult.paymentId,
         boleto_linha_digitavel: mpResult.linha,
         mp_payment_id: mpResult.paymentId,
+        mercado_pago_previous_payment_id: previousPaymentId && previousPaymentId !== mpResult.paymentId ? previousPaymentId : text(lanc.mercado_pago_previous_payment_id),
+        mercado_pago_replaced_at: previousPaymentId && previousPaymentId !== mpResult.paymentId ? new Date().toISOString() : text(lanc.mercado_pago_replaced_at),
         boleto_gerado_em: new Date().toISOString(),
         boleto_erro: "",
         status: "Boleto gerado",

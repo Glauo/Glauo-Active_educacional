@@ -181,6 +181,12 @@ function absoluteUrl(url: string) {
   return `${origin}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
+function shortPaymentId(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.length > 14 ? raw.slice(-14) : raw;
+}
+
 function boletoLink(lancamento: Lancamento) {
   const href = boletoPdfHref(lancamento);
   if (href) return absoluteUrl(href);
@@ -917,6 +923,16 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                               <span className="table-name-primary">{nome}</span>
                               {r.codigo && <span className="table-name-secondary">{String(r.codigo)}</span>}
                               {String(r.descricao || "") && String(r.descricao) !== nome && <span className="table-name-secondary">{String(r.descricao)}</span>}
+                              {String(r.mercado_pago_payment_id || r.mp_payment_id || "").trim() && (
+                                <span className="table-name-secondary">
+                                  MP atual: {shortPaymentId(r.mercado_pago_payment_id || r.mp_payment_id)}
+                                </span>
+                              )}
+                              {String(r.mercado_pago_previous_payment_id || "").trim() && (
+                                <span className="table-name-secondary" style={{ color: "var(--text-muted)" }}>
+                                  MP anterior: {shortPaymentId(r.mercado_pago_previous_payment_id)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "—" ? fmtDate(venc) : "—"}{atrasado && " ⚠"}</span></td>
