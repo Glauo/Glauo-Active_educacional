@@ -3,6 +3,7 @@ import { dbList, dbSet } from "./db";
 type Row = Record<string, unknown>;
 
 const RECEIVABLES_KEY = "receivables.json";
+const DELETED_BILLING_KEY = "finance_deleted_keys.json";
 const CYCLE_MONTHS = 6;
 
 function text(value: unknown) {
@@ -19,6 +20,10 @@ function moneyValue(value: unknown) {
 
 function moneyInput(value: number) {
   return value.toFixed(2).replace(".", ",");
+}
+
+function moneyKey(value: unknown) {
+  return moneyValue(value).toFixed(2);
 }
 
 function parseDate(value: unknown) {
@@ -118,6 +123,23 @@ function dueMonth(receivable: Row) {
   return due ? competencia(due) : "";
 }
 
+function studentBillingKeys(student: Row) {
+  return [
+    text(student.id),
+    studentLogin(student),
+    studentName(student),
+    text(student.cpf),
+  ].map(lower).filter(Boolean);
+}
+
+function billingTombstoneKey(entityKey: string, comp: string, value: unknown) {
+  return `${entityKey}|${comp}|${moneyKey(value)}`;
+}
+
+function hasDeletedBilling(student: Row, comp: string, value: unknown, deletedKeys: Set<string>) {
+  return studentBillingKeys(student).some((key) => deletedKeys.has(billingTombstoneKey(key, comp, value)));
+}
+
 function shouldCreateRenewal(existingMonthly: Row[], today = new Date()) {
   if (existingMonthly.length === 0) return true;
   const latest = existingMonthly
@@ -130,7 +152,7 @@ function shouldCreateRenewal(existingMonthly: Row[], today = new Date()) {
   return latest < today;
 }
 
-function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}) {
+function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}, deletedKeys = new Set<string>()) {
   if (!activeStudent(student)) return [];
   const value = moneyValue(student.valor_mensalidade || student.mensalidade || student.plano_valor);
   const aluno = studentName(student);
@@ -153,6 +175,7 @@ function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}
     const duplicate = receivables.some((item) => sameStudent(item, student) && isMonthly(item) && dueMonth(item) === comp)
       || created.some((item) => text(item.competencia) === comp);
     if (duplicate) continue;
+    if (hasDeletedBilling(student, comp, value, deletedKeys)) continue;
 
     created.push({
       id: crypto.randomUUID(),
@@ -187,17 +210,19 @@ function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}
 
 export async function ensureStudentMonthlyBilling(student: Row, actor: Row = {}) {
   const receivables = await dbList<Row>(RECEIVABLES_KEY);
-  const created = monthlyRowsForStudent(student, receivables, actor);
+  const deletedKeys = new Set((await dbList<Row>(DELETED_BILLING_KEY)).map((item) => text(item.key)).filter(Boolean));
+  const created = monthlyRowsForStudent(student, receivables, actor, deletedKeys);
   if (created.length > 0) await dbSet(RECEIVABLES_KEY, [...receivables, ...created]);
   return created;
 }
 
 export async function ensureStudentsMonthlyBilling(students: Row[], actor: Row = {}) {
   const receivables = await dbList<Row>(RECEIVABLES_KEY);
+  const deletedKeys = new Set((await dbList<Row>(DELETED_BILLING_KEY)).map((item) => text(item.key)).filter(Boolean));
   const created: Row[] = [];
   let current = receivables;
   for (const student of students) {
-    const rows = monthlyRowsForStudent(student, current, actor);
+    const rows = monthlyRowsForStudent(student, current, actor, deletedKeys);
     if (rows.length > 0) {
       created.push(...rows);
       current = [...current, ...rows];

@@ -23,6 +23,64 @@ function isPaid(value: unknown) {
   return status.includes("pago") || status.includes("baixado") || status.includes("liquidado");
 }
 
+function lower(value: unknown) {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function moneyValue(value: unknown) {
+  return Number.parseFloat(text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+function moneyKey(value: unknown) {
+  return moneyValue(value).toFixed(2);
+}
+
+function parseDate(value: unknown) {
+  const raw = text(value);
+  if (!raw) return null;
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), 12);
+  const date = new Date(raw.includes("T") ? raw : `${raw}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dueMonth(row: Record<string, unknown>) {
+  const explicit = text(row.competencia || row.referencia);
+  if (/^\d{4}-\d{2}$/.test(explicit)) return explicit;
+  const due = parseDate(row.vencimento || row.data_vencimento);
+  return due ? `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}` : "";
+}
+
+function isMonthly(row: Record<string, unknown>) {
+  const raw = lower(`${text(row.categoria)} ${text(row.tipo_lancamento_detalhe)} ${text(row.tipo_cobranca)} ${text(row.descricao)}`);
+  return raw.includes("mensal");
+}
+
+function billingEntityKeys(row: Record<string, unknown>) {
+  return [
+    text(row.aluno_id),
+    text(row.aluno_login),
+    text(row.aluno || row.nome),
+    text(row.cpf),
+  ].map(lower).filter(Boolean);
+}
+
+function billingTombstoneEntries(row: Record<string, unknown>, actor: string) {
+  const comp = dueMonth(row);
+  const value = row.valor_parcela ?? row.valor ?? row.valor_total;
+  if (!comp || !moneyValue(value) || !isMonthly(row)) return [];
+  return billingEntityKeys(row).map((entityKey) => ({
+    id: crypto.randomUUID(),
+    key: `${entityKey}|${comp}|${moneyKey(value)}`,
+    lancamento_id: text(row.id),
+    aluno: text(row.aluno || row.nome),
+    competencia: comp,
+    valor: moneyKey(value),
+    deleted_at: new Date().toISOString(),
+    deleted_by: actor,
+  }));
+}
+
 function ensureFinanceIds(items: Record<string, unknown>[]) {
   let changed = false;
   const next = items.map((item) => {
@@ -363,14 +421,31 @@ export async function DELETE(req: NextRequest) {
   }
   const selectedIds = new Set(ids);
   const filtered = lancamentos.filter((l) => !selectedIds.has(text(l.id)));
-  await dbSet(key, filtered);
   const deleted = lancamentos.filter((l) => selectedIds.has(text(l.id)));
+  const actor = text(session.pessoa || session.usuario);
+
+  if (tipo !== "despesas") {
+    const deletedKeys = await dbList<Record<string, unknown>>("finance_deleted_keys.json");
+    const existingKeys = new Set(deletedKeys.map((item) => text(item.key)).filter(Boolean));
+    const tombstones = deleted
+      .flatMap((target) => billingTombstoneEntries(target, actor))
+      .filter((item) => {
+        if (existingKeys.has(item.key)) return false;
+        existingKeys.add(item.key);
+        return true;
+      });
+    if (tombstones.length > 0) {
+      await dbSet("finance_deleted_keys.json", [...deletedKeys, ...tombstones].slice(-2000));
+    }
+  }
+
+  await dbSet(key, filtered);
   for (const target of deleted) {
     await audit({
       acao: ids.length > 1 ? "excluir_lancamentos_em_lote" : "excluir_lancamento",
       tipo,
       lancamento_id: target.id,
-      usuario: session.pessoa || session.usuario,
+      usuario: actor,
       perfil: session.perfil,
       antes: target,
       total_selecionado: ids.length,
