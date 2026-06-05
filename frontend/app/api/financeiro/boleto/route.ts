@@ -31,6 +31,11 @@ function isMercadoPagoUrl(value: unknown) {
   return url.startsWith("http") && (url.includes("mercadopago") || url.includes("mercado_pago"));
 }
 
+function paymentStatusAllowsTicket(status: unknown) {
+  const value = text(status).toLowerCase();
+  return value === "pending" || value === "in_process";
+}
+
 function sameStudentInvoice(row: Row, session: { usuario?: string; pessoa?: string }) {
   const invoiceKeys = [
     row.aluno_login,
@@ -73,18 +78,13 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = new URL(req.url).origin;
-  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
-  if (isMercadoPagoUrl(mercadoPagoUrl)) return NextResponse.redirect(mercadoPagoUrl);
-
-  const externalPdf = text(lancamento.boleto_pdf_url);
-  if (isMercadoPagoUrl(externalPdf)) return NextResponse.redirect(externalPdf);
-
   const paymentId = text(lancamento.mercado_pago_payment_id || lancamento.mp_payment_id || lancamento.boleto_codigo);
   if (paymentId) {
     try {
       const payment = await loadMercadoPagoPayment(paymentId);
       const recoveredUrl = text(extractBoletoPdfUrl(payment));
       const recoveredLinha = text(extractLinhaDigitavel(payment));
+      const paymentStatus = text(payment.status || lancamento.mercado_pago_status);
       if (recoveredUrl) {
         const nextRecebimentos = recebimentos.map((item) => text(item.id) === id ? {
           ...item,
@@ -97,13 +97,22 @@ export async function GET(req: NextRequest) {
           last_payment_check_at: new Date().toISOString(),
         } : item);
         await dbSet("receivables.json", nextRecebimentos);
-        return NextResponse.redirect(recoveredUrl);
+        if (paymentStatusAllowsTicket(paymentStatus)) {
+          return NextResponse.redirect(recoveredUrl);
+        }
+        return boletoFallbackHtml(nextRecebimentos.find((item) => text(item.id) === id) || lancamento, payment);
       }
       return boletoFallbackHtml(lancamento, payment);
     } catch {
       return boletoFallbackHtml(lancamento, null);
     }
   }
+
+  const mercadoPagoUrl = text(lancamento.mercado_pago_ticket_url || lancamento.boleto_url);
+  if (isMercadoPagoUrl(mercadoPagoUrl)) return NextResponse.redirect(mercadoPagoUrl);
+
+  const externalPdf = text(lancamento.boleto_pdf_url);
+  if (isMercadoPagoUrl(externalPdf)) return NextResponse.redirect(externalPdf);
 
   const generated = await createMercadoPagoBoleto(lancamento, id, origin);
   if (generated.ok) {

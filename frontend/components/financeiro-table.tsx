@@ -240,17 +240,27 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
       let current: Lancamento = currentLancamento;
       let currentPhone = financePhone(current);
       if (!String(current.mercado_pago_ticket_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim() || !currentPhone) {
-        const res = await fetch("/api/financeiro", {
-          method: "PUT",
+        const hasMercadoPagoHistory = Boolean(String(
+          current.mercado_pago_payment_id ||
+          current.mp_payment_id ||
+          current.mercado_pago_ticket_url ||
+          current.boleto_url ||
+          current.boleto_codigo ||
+          ""
+        ).trim());
+        const res = await fetch(hasMercadoPagoHistory ? "/api/financeiro/regerar-boleto" : "/api/financeiro", {
+          method: hasMercadoPagoHistory ? "POST" : "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: current.id, tipo: "recebimentos", gerar_boleto: true })
+          body: JSON.stringify(hasMercadoPagoHistory ? { id: current.id } : { id: current.id, tipo: "recebimentos", gerar_boleto: true })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
           alert(boletoErrorMessage(data));
           return;
         }
-        current = (data.lancamento || current) as Lancamento;
+        current = ((data.resultados && Array.isArray(data.resultados) && data.resultados[0]?.boleto_url)
+          ? { ...current, mercado_pago_ticket_url: data.resultados[0].boleto_url, boleto_url: data.resultados[0].boleto_url, boleto_pdf_url: data.resultados[0].boleto_url }
+          : (data.lancamento || current)) as Lancamento;
         setCurrentLancamento(current);
         currentPhone = financePhone(current);
       }
@@ -330,22 +340,32 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
   const pdfHref = boletoPdfHref(lancamento);
+  const hasMercadoPagoHistory = Boolean(String(
+    lancamento.mercado_pago_payment_id ||
+    lancamento.mp_payment_id ||
+    lancamento.mercado_pago_ticket_url ||
+    lancamento.boleto_url ||
+    lancamento.boleto_codigo ||
+    ""
+  ).trim());
 
   async function gerar() {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/financeiro", {
-        method: "PUT",
+      const res = await fetch(hasMercadoPagoHistory ? "/api/financeiro/regerar-boleto" : "/api/financeiro", {
+        method: hasMercadoPagoHistory ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, tipo: "recebimentos", gerar_boleto: true })
+        body: JSON.stringify(hasMercadoPagoHistory ? { id } : { id, tipo: "recebimentos", gerar_boleto: true })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         alert(boletoErrorMessage(data));
         return;
       }
-      const next = (data.lancamento || lancamento) as Lancamento;
+      const next = ((data.resultados && Array.isArray(data.resultados) && data.resultados[0]?.boleto_url)
+        ? { ...lancamento, mercado_pago_ticket_url: data.resultados[0].boleto_url, boleto_url: data.resultados[0].boleto_url, boleto_pdf_url: data.resultados[0].boleto_url }
+        : (data.lancamento || lancamento)) as Lancamento;
       window.open(boletoLink(next) || `/api/financeiro/boleto?id=${id}`, "_blank");
     } finally {
       setLoading(false);

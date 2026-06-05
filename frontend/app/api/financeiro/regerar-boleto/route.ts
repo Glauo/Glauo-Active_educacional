@@ -93,6 +93,9 @@ export async function POST(req: NextRequest) {
       updatedMap.set(id, {
         ...lanc,
         boleto_status: "Erro MP",
+        mercado_pago_ticket_url: "",
+        boleto_url: "",
+        boleto_pdf_url: "",
         boleto_erro: mpResult.message,
         boleto_gerado_em: new Date().toISOString(),
       });
