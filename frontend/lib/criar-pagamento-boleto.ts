@@ -90,31 +90,38 @@ function extractMercadoPagoError(error: unknown) {
   return { message, details };
 }
 
-function extractBoletoPdfUrl(raw: Record<string, unknown>) {
+export function extractBoletoPdfUrl(raw: Record<string, unknown>) {
   const transactionDetails = asRecord(raw.transaction_details);
   const paymentMethod = asRecord(raw.payment_method);
   const paymentMethodData = asRecord(paymentMethod.data);
   const point = asRecord(raw.point_of_interaction);
   const transactionData = asRecord(point.transaction_data);
+  const barCode = asRecord(raw.bar_code);
 
   return text(
     transactionDetails.external_resource_url ||
+    transactionData.external_resource_url ||
     paymentMethodData.external_resource_url ||
+    paymentMethodData.ticket_url ||
     transactionData.ticket_url ||
+    barCode.url ||
     raw.external_resource_url
   );
 }
 
-function extractLinhaDigitavel(raw: Record<string, unknown>) {
+export function extractLinhaDigitavel(raw: Record<string, unknown>) {
   const transactionDetails = asRecord(raw.transaction_details);
   const transactionBarcode = asRecord(transactionDetails.barcode);
   const rootBarCode = asRecord(raw.bar_code);
   const transactionBarCode = asRecord(transactionDetails.bar_code);
+  const point = asRecord(raw.point_of_interaction);
+  const transactionData = asRecord(point.transaction_data);
 
   return text(
     rootBarCode.formatted_search_text ||
     transactionBarCode.formatted_search_text ||
     transactionDetails.digitable_line ||
+    transactionData.digitable_line ||
     transactionBarcode.content ||
     rootBarCode.content
   );
@@ -174,17 +181,18 @@ export async function criarPagamentoBoleto(
     const pdfUrl = extractBoletoPdfUrl(raw);
     const linhaDigitavel = extractLinhaDigitavel(raw);
 
-    if (!pdfUrl) {
+    const paymentId = text(raw.id);
+    if (!pdfUrl && !paymentId) {
       return {
         ok: false,
-        message: "O Mercado Pago retornou pagamento, mas nao enviou a URL do boleto PDF.",
+        message: "O Mercado Pago retornou um boleto incompleto e sem identificador de pagamento.",
         details: raw,
       };
     }
 
     return {
       ok: true,
-      paymentId: text(raw.id),
+      paymentId,
       status: text(raw.status),
       pdfUrl,
       linhaDigitavel,

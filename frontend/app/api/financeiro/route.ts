@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email";
 import { isAdmin } from "@/lib/roles";
 import { financeMessage } from "@/lib/finance-message";
 import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
+import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 
 function text(value: unknown) {
   return String(value || "").trim();
@@ -177,6 +178,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const tipo = searchParams.get("tipo") || "recebimentos";
   const key = tipo === "despesas" ? "payables.json" : "receivables.json";
+  if (tipo !== "despesas") {
+    await reconcileMercadoPagoPendingReceivables(8);
+  }
   const raw = searchParams.get("include_pdf") === "true"
     ? await dbList<Record<string, unknown>>(key)
     : await dbListWithoutKeys<Record<string, unknown>>(key, HEAVY_KEYS);

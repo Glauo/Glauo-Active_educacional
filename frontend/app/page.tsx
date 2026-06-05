@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { dbList, dbListWithoutKeys } from "@/lib/db";
 import { dashboardForPerfil, getSession } from "@/lib/auth";
 import { vipPackageStats } from "@/lib/course-modules";
+import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 import { redirect } from "next/navigation";
 
 type Aluno = Record<string, unknown>;
@@ -74,6 +75,8 @@ export default async function DashboardPage() {
   if (!session) redirect("/login");
   const dashboard = dashboardForPerfil(session.perfil);
   if (dashboard !== "/") redirect(dashboard);
+
+  await reconcileMercadoPagoPendingReceivables(8);
 
   const [alunos, turmas, professores, recebimentos, agenda] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),

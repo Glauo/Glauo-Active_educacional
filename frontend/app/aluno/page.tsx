@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { StudentPortalClient } from "@/components/student-portal-client";
 import { isHomeworkActivity, normalizeList, studentMatchesTarget, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
 import { hasWorkbookStudentTarget, releasedWorkbookLessons, studentWorkbookBook, workbookLibraryBooks } from "@/lib/workbook-lessons";
+import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 
 type Aluno = { id?: string; nome?: string; name?: string; login?: string; turma?: string; classe?: string; livro?: string; book?: string; status?: string; [k: string]: unknown };
 type Desafio = { id?: string; titulo?: string; title?: string; turma?: string; pontos?: number | string; status?: string; [k: string]: unknown };
@@ -103,6 +104,8 @@ export default async function AlunoHomePage() {
   const session = await getSession();
   if (!session) redirect("/aluno/login");
   if (!lower(session.perfil).includes("aluno")) redirect("/");
+
+  await reconcileMercadoPagoPendingReceivables(6);
 
   const [alunos, desafios, conclusoes, notas, frequencias, recebimentos, mensagens, atividades, entregas, agenda, livros, materiais, videos] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { NovoAlunoBtn } from "@/components/aluno-modal";
 import { AlunosSearchTable } from "@/components/alunos-search-table";
 import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
+import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 
 type Aluno = { id?: string; nome?: string; name?: string; login?: string; cpf?: string; turma?: string; classe?: string; livro?: string; book?: string; status?: string; situacao?: string; status_financeiro?: string; situacao_financeira?: string; responsavel?: string; [k: string]: unknown };
 type Recebimento = { id?: string; aluno?: string; nome?: string; aluno_id?: string; aluno_login?: string; descricao?: string; valor?: string | number; vencimento?: string; data_vencimento?: string; data_baixa?: string; status?: string; situacao?: string; boleto_pdf_url?: string; boleto_status?: string; categoria?: string; [k: string]: unknown };
@@ -105,6 +106,10 @@ function slimRecebimentos(alunos: Aluno[], recebimentos: Recebimento[]) {
 export default async function AlunosPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  if (isAdminOrCoordinator(session)) {
+    await reconcileMercadoPagoPendingReceivables(8);
+  }
 
   const [alunos, recebimentos, todasFrequencias] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),

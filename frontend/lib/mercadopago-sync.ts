@@ -125,6 +125,9 @@ function candidateReferences(payment: Row) {
     metadata.external_reference,
     metadata.invoice_id,
     metadata.installment_id,
+    metadata.aluno_id,
+    metadata.aluno_login,
+    metadata.aluno,
     additional.external_reference,
     additional.items && Array.isArray(additional.items) ? (additional.items[0] as Row | undefined)?.id : "",
     payer.email,
@@ -162,6 +165,24 @@ export type MercadoPagoSyncResult = {
   paymentId: string;
   status: string;
   lancamento?: Row;
+}
+
+function isOpenFinanceStatus(status: unknown) {
+  const value = lower(status);
+  return !value || (!value.includes("pago") && !value.includes("baixado") && !value.includes("liquidado") && !value.includes("cancel") && !value.includes("estorn") && !value.includes("contest"));
+}
+
+function isTerminalMercadoPagoStatus(status: unknown) {
+  const value = lower(status);
+  return value === "approved" || value === "rejected" || value === "cancelled" || value === "refunded" || value === "charged_back";
+}
+
+function minutesSince(value: unknown) {
+  const raw = text(value);
+  if (!raw) return Number.POSITIVE_INFINITY;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return Number.POSITIVE_INFINITY;
+  return Math.floor((Date.now() - parsed.getTime()) / 60000);
 }
 
 export async function syncMercadoPagoPayment(paymentId: string, source: "webhook" | "manual") : Promise<MercadoPagoSyncResult> {
@@ -288,4 +309,49 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
   });
 
   return { ok: true, matched: true, paid, paymentId, status, lancamento: next };
+}
+
+export async function reconcileMercadoPagoPendingReceivables(limit = 12) {
+  const receivables = await dbList<Row>("receivables.json");
+  const candidates = receivables
+    .filter((row) => {
+      const paymentId = text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo);
+      if (!paymentId) return false;
+      if (!isOpenFinanceStatus(row.status || row.situacao)) return false;
+      if (isTerminalMercadoPagoStatus(row.payment_status || row.mercado_pago_status || row.mp_status)) return false;
+      return minutesSince(row.last_payment_check_at) >= 2;
+    })
+    .sort((a, b) => {
+      const aChecked = minutesSince(a.last_payment_check_at);
+      const bChecked = minutesSince(b.last_payment_check_at);
+      if (aChecked !== bChecked) return bChecked - aChecked;
+      return text(a.vencimento || a.data_vencimento).localeCompare(text(b.vencimento || b.data_vencimento));
+    })
+    .slice(0, limit);
+
+  let checked = 0;
+  let matched = 0;
+  let paid = 0;
+  let errors = 0;
+
+  for (const row of candidates) {
+    const paymentId = text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo);
+    if (!paymentId) continue;
+    checked++;
+    try {
+      const result = await syncMercadoPagoPayment(paymentId, "manual");
+      if (result.matched) matched++;
+      if (result.paid) paid++;
+    } catch (error) {
+      errors++;
+      await audit({
+        acao: "mercado_pago_reconciliacao_automatica_erro",
+        mercado_pago_payment_id: paymentId,
+        lancamento_id: row.id,
+        erro: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { checked, matched, paid, errors };
 }

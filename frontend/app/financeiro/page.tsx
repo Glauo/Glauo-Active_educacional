@@ -9,6 +9,7 @@ import { SyncWhatsappBoletosButton } from "@/components/sync-whatsapp-boletos-bu
 import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
 import { ensureStudentsMonthlyBilling } from "@/lib/monthly-billing";
 import { ensureAutomaticBackup } from "@/lib/auto-backup";
+import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 
 type Lancamento = { id?: string; aluno?: string; nome?: string; descricao?: string; valor?: number | string; vencimento?: string; data_vencimento?: string; status?: string; situacao?: string; tipo?: string; codigo?: string; [k: string]: unknown };
 const HEAVY_KEYS = ["boleto_pdf_b64", "file_b64", "pdf_b64", "base64", "arquivo_b64", "foto_b64", "imagem_b64", "documento_b64", "anexo_b64"];
@@ -28,6 +29,10 @@ function valorParcela(lancamento: Lancamento) {
 export default async function FinanceiroPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  if (isAdminOrCoordinator(session)) {
+    await reconcileMercadoPagoPendingReceivables();
+  }
 
   let [recebimentos, despesas, alunos, professores, fornecedores, fechamentos] = await Promise.all([
     dbListWithoutKeys<Lancamento>("receivables.json", HEAVY_KEYS),
