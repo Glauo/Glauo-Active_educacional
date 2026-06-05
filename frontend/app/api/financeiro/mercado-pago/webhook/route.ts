@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { dbGet, dbList, dbSet } from "@/lib/db";
+import { syncMercadoPagoPayment } from "@/lib/mercadopago-sync";
 
 type Row = Record<string, unknown>;
 
@@ -33,15 +34,6 @@ function safeCompareHex(a: string, b: string) {
   return timingSafeEqual(left, right);
 }
 
-function isPaidStatus(status: unknown) {
-  const value = lower(status);
-  return value === "approved" || value === "paid" || value.includes("pago") || value.includes("baixado") || value.includes("liquidado");
-}
-
-function isOpenStatus(status: unknown) {
-  return !isPaidStatus(status);
-}
-
 function boletoToken(config: Row | null) {
   return text(
     process.env.ACTIVE_MERCADO_PAGO_ACCESS_TOKEN ||
@@ -72,16 +64,6 @@ async function audit(entry: Row) {
   ]);
 }
 
-async function loadPayment(paymentId: string, token: string) {
-  const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  const data = await res.json().catch(() => ({})) as Row;
-  if (!res.ok) throw new Error(text(data.message || data.error || `Mercado Pago HTTP ${res.status}`));
-  return data;
-}
-
 function verifySignature(req: NextRequest, dataId: string, secret: string) {
   const signature = text(req.headers.get("x-signature"));
   const requestId = text(req.headers.get("x-request-id"));
@@ -92,23 +74,6 @@ function verifySignature(req: NextRequest, dataId: string, secret: string) {
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
   const expected = createHmac("sha256", secret).update(manifest).digest("hex");
   return { configured: true, valid: safeCompareHex(expected, v1), reason: "checked" };
-}
-
-function paymentMetadata(payment: Row) {
-  return payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
-    ? payment.metadata as Row
-    : {};
-}
-
-function paymentMethodId(payment: Row) {
-  const method = payment.payment_method && typeof payment.payment_method === "object" && !Array.isArray(payment.payment_method)
-    ? payment.payment_method as Row
-    : {};
-  return lower(payment.payment_method_id || method.id);
-}
-
-function formaPagamentoMercadoPago(payment: Row) {
-  return paymentMethodId(payment) === "pix" ? "Pix Mercado Pago" : "Boleto Mercado Pago";
 }
 
 export async function GET() {
@@ -144,103 +109,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const payment = await loadPayment(paymentId, token);
-    const metadata = paymentMetadata(payment);
-    const externalReference = text(payment.external_reference || metadata.lancamento_id || metadata.external_reference);
-    const status = text(payment.status);
-    const statusDetail = text(payment.status_detail);
-    const paid = isPaidStatus(status);
-    const formaPagamento = formaPagamentoMercadoPago(payment);
-    const now = new Date().toISOString();
-    const today = now.slice(0, 10);
-
-    const recebimentos = await dbList<Row>("receivables.json");
-    const idx = recebimentos.findIndex((item) =>
-      text(item.id) === externalReference ||
-      text(item.mercado_pago_payment_id) === paymentId ||
-      text(item.mp_payment_id) === paymentId ||
-      text(item.boleto_codigo) === paymentId
-    );
-
-    if (idx === -1) {
-      await audit({
-        acao: "mercado_pago_webhook_sem_lancamento",
-        mercado_pago_payment_id: paymentId,
-        external_reference: externalReference,
-        status,
-        status_detail: statusDetail,
-      });
-      return NextResponse.json({ ok: true, matched: false });
-    }
-
-    const before = recebimentos[idx];
-    const paymentAmount = moneyNumber(payment.transaction_amount) || moneyNumber((payment.transaction_details as Row | undefined)?.total_paid_amount) || moneyNumber(before.valor_pago) || moneyNumber(before.valor_parcela) || moneyNumber(before.valor);
-    const next = {
-      ...before,
-      mercado_pago_payment_id: paymentId,
-      mp_payment_id: paymentId,
-      mercado_pago_status: status,
-      mp_status: status,
-      mercado_pago_detail: statusDetail,
-      mp_status_detail: statusDetail,
-      mercado_pago_payment_method: paymentMethodId(payment),
-      mercado_pago_webhook_at: now,
-      ...(paid ? {
-        status: "Pago",
-        situacao: "Pago",
-        data_baixa: text(before.data_baixa) || today,
-        valor_pago: text(before.valor_pago) || paymentAmount,
-        forma_pagamento: formaPagamento,
-        baixado_por: text(before.baixado_por) || "Mercado Pago",
-      } : {
-        status: isOpenStatus(before.status) ? before.status : "Pendente",
-      }),
-      updated_at: now,
-      updated_by: "Mercado Pago",
-    };
-
-    const nextRecebimentos = recebimentos.map((item, index) => index === idx ? next : item);
-    const writes: Promise<boolean>[] = [dbSet("receivables.json", nextRecebimentos)];
-
-    if (paid && isOpenStatus(before.status)) {
-      const receipts = await dbList<Row>("receipts.json");
-      const alreadyReceipt = receipts.some((receipt) => text(receipt.mercado_pago_payment_id) === paymentId || text(receipt.autenticidade) === `AE-MP-${paymentId}`);
-      if (!alreadyReceipt) {
-        writes.push(dbSet("receipts.json", [
-          ...receipts,
-          {
-            id: crypto.randomUUID(),
-            lancamento_id: text(before.id),
-            tipo: "recebimentos",
-            pessoa: before.aluno || before.nome,
-            descricao: before.descricao || "Mensalidade escolar",
-            valor: before.valor,
-            valor_pago: paymentAmount,
-            forma_pagamento: formaPagamento,
-            data: now,
-            autenticidade: `AE-MP-${paymentId}`,
-            gerado_automaticamente: true,
-            mercado_pago_payment_id: paymentId,
-          },
-        ]));
-      }
-    }
-
-    await Promise.all(writes);
+    const result = await syncMercadoPagoPayment(paymentId, "webhook");
     await audit({
-      acao: paid && isOpenStatus(before.status) ? "baixar_pagamento_mercado_pago" : "atualizar_status_mercado_pago",
-      tipo: "recebimentos",
-      lancamento_id: before.id,
+      acao: "mercado_pago_webhook_processado",
       mercado_pago_payment_id: paymentId,
-      external_reference: externalReference,
-      status,
-      status_detail: statusDetail,
+      matched: result.matched,
+      paid: result.paid,
+      status: result.status,
       assinatura_webhook_validada: signature.valid,
-      antes: before,
-      depois: next,
     });
-
-    return NextResponse.json({ ok: true, matched: true, paid, status });
+    return NextResponse.json(result);
   } catch (err) {
     console.error("[mercado-pago webhook]", err);
     await audit({

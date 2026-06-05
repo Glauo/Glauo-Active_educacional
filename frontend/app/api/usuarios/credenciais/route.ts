@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { isAdminOrCoordinator } from "@/lib/roles";
+import { isAdmin } from "@/lib/roles";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
 type Row = Record<string, unknown>;
@@ -28,7 +28,7 @@ function credentialMessage(nome: string, usuario: string, senha: string) {
 
 export async function GET() {
   const session = await getSession();
-  if (!session || !isAdminOrCoordinator(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!session || !isAdmin(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   const [users, professores] = await Promise.all([dbList<Row>("users.json"), dbList<Row>("teachers.json")]);
   const lista = professores.map((p) => {
     const nome = text(p.nome || p.name);
@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const session = await getSession();
-  if (!session || !isAdminOrCoordinator(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!session || !isAdmin(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   const { id, nome, usuario, senha, perfil } = await req.json() as { id: string; nome: string; usuario: string; senha: string; perfil?: string };
   if (!id || !usuario || !senha) return NextResponse.json({ error: "ID, usuario e senha sao obrigatorios." }, { status: 400 });
   if (String(senha).length < 4) return NextResponse.json({ error: "Senha deve ter pelo menos 4 caracteres." }, { status: 400 });
@@ -67,7 +67,7 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
-  if (!session || !isAdminOrCoordinator(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!session || !isAdmin(session)) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
   const users = await dbList<Row>("users.json");

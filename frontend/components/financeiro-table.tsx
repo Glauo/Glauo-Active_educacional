@@ -399,6 +399,47 @@ function PixBtn({ lancamento }: { lancamento: Lancamento }) {
   );
 }
 
+function VerificarPagamentoBtn({ lancamento }: { lancamento: Lancamento }) {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const id = String(lancamento.id || "");
+  const paymentId = String(
+    lancamento.mercado_pago_payment_id ||
+    lancamento.mp_payment_id ||
+    lancamento.boleto_codigo ||
+    lancamento.pix_codigo ||
+    ""
+  ).trim();
+
+  if (!id && !paymentId) return null;
+
+  async function verificar() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/financeiro/verificar-pagamento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, payment_id: paymentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(String(data.error || "Nao foi possivel verificar o pagamento."));
+        return;
+      }
+      alert(String(data.message || "Pagamento consultado com sucesso."));
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button className="btn btn-ghost btn-sm" type="button" onClick={verificar} disabled={loading}>
+      {loading ? "Verificando..." : "Verificar pagamento"}
+    </button>
+  );
+}
+
 /* ── Recibo ── */
 function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose: () => void }) {
   const nome = String(lancamento.aluno || lancamento.nome || "Pagante");
@@ -848,7 +889,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                           <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "—" ? fmtDate(venc) : "—"}{atrasado && " ⚠"}</span></td>
 	                          <td><span style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{formatBRL(valorParcela(r))}</span></td>
                           <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
-                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
+                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><VerificarPagamentoBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
                         </tr>
                       );
                     })}

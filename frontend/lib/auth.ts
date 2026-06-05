@@ -22,6 +22,11 @@ type RawUser = {
   perfil: string;
   pessoa: string;
   unit?: string;
+  is_active?: boolean;
+  status?: string;
+  deleted_at?: string;
+  must_change_password?: boolean;
+  last_login_at?: string;
 };
 
 export async function signToken(payload: SessionUser): Promise<string> {
@@ -56,11 +61,22 @@ type StudentRecord = {
   senha?: string;
   turma?: string;
   classe?: string;
+  is_active?: boolean;
+  status?: string;
+  deleted_at?: string;
   [k: string]: unknown;
 };
 
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isActiveRecord(record: { is_active?: boolean; status?: string; deleted_at?: string } | null | undefined) {
+  if (!record) return false;
+  if (record.is_active === false) return false;
+  if (String(record.deleted_at || "").trim()) return false;
+  const status = normalize(record.status || "ativo");
+  return !status.includes("inativ") && !status.includes("cancel") && !status.includes("arquiv");
 }
 
 export function dashboardForPerfil(perfil?: string) {
@@ -89,7 +105,7 @@ export async function validateCredentials(
   }
 
   const found = users.find(
-    (u) => normalize(u.usuario) === login && String(u.senha) === password
+    (u) => isActiveRecord(u) && normalize(u.usuario) === login && String(u.senha) === password
   );
 
   if (!found) {
@@ -112,7 +128,7 @@ export async function validateStudentCredentials(
   const password = String(senha);
   const students = await dbList<StudentRecord>("students.json");
   const found = students.find(
-    (s) => s.login && normalize(s.login) === normalizedLogin && String(s.senha) === password
+    (s) => isActiveRecord(s) && s.login && normalize(s.login) === normalizedLogin && String(s.senha) === password
   );
   if (!found) return null;
   return {

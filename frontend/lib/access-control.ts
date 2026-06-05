@@ -36,8 +36,8 @@ export const ACCESS_MODULES: AccessModule[] = [
   { key: "wiz", label: "Wiz IA", path: "/wiz", roles: ["admin", "coord", "dire", "gestor", "comercial", "prof"] },
   { key: "condojob", label: "CondoJob", path: "/condojob", roles: ["admin", "coord", "dire", "gestor", "comercial"] },
   { key: "configuracoes", label: "Configuracoes", path: "/configuracoes", roles: ["admin", "coord", "dire", "gestor"] },
-  { key: "acessos", label: "Acessos", path: "/usuarios/credenciais", roles: ["admin", "coord", "dire", "gestor"] },
-  { key: "acessos_alunos", label: "Credenciais de alunos", path: "/alunos/credenciais", roles: ["admin", "coord", "dire", "gestor"] },
+  { key: "acessos", label: "Acessos", path: "/usuarios/credenciais", roles: ["admin"] },
+  { key: "acessos_alunos", label: "Credenciais de alunos", path: "/alunos/credenciais", roles: ["admin"] },
 ];
 
 function lower(value: unknown) {

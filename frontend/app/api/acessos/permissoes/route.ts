@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ACCESS_MODULES, blockedRoutesFromUser, canAccessPath, defaultCanAccess } from "@/lib/access-control";
 import { dbList, dbSet } from "@/lib/db";
-import { isAdminOrCoordinator } from "@/lib/roles";
+import { isAdmin } from "@/lib/roles";
 
 type Row = Record<string, unknown>;
 
@@ -20,7 +20,7 @@ function allowedProfiles(perfil: unknown) {
 
 export async function GET() {
   const session = await getSession();
-  if (!session || !isAdminOrCoordinator(session)) {
+  if (!session || !isAdmin(session)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
 
@@ -49,7 +49,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const session = await getSession();
-  if (!session || !isAdminOrCoordinator(session)) {
+  if (!session || !isAdmin(session)) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
   }
 

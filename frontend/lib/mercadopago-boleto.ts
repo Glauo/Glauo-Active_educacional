@@ -252,27 +252,6 @@ function studentFinancePatch(aluno: Row | null) {
   });
 }
 
-export function expirationDate(value: unknown) {
-  const parsed = new Date(text(value));
-  let date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-
-  if (date < now) {
-    date = new Date();
-    date.setDate(date.getDate() + 3);
-  }
-
-  const maxDate = new Date();
-  maxDate.setDate(maxDate.getDate() + 29);
-  if (date > maxDate) {
-    date = new Date(maxDate);
-  }
-
-  date.setHours(23, 59, 0, 0);
-  return date.toISOString();
-}
-
 function formatMercadoPagoErrorDetail(details: unknown) {
   if (!details || typeof details !== "object") return text(details);
   const row = details as Record<string, unknown>;
@@ -420,6 +399,8 @@ export async function createMercadoPagoBoleto(
     const updated = {
       ...item,
       ...alunoPatch,
+      external_reference: id,
+      payment_external_reference: id,
       mercado_pago_payment_id: result.paymentId,
       mercado_pago_status: result.status,
       mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
@@ -566,6 +547,8 @@ export async function createMercadoPagoPix(
     const updated = {
       ...item,
       ...alunoPatch,
+      external_reference: id,
+      payment_external_reference: id,
       mercado_pago_payment_id: result.paymentId,
       mercado_pago_status: result.status,
       mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
@@ -596,6 +579,8 @@ export async function createMercadoPagoPix(
 export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<MercadoPagoBoletoResult, { ok: true }>) {
   return {
     ...lancamento,
+    external_reference: text(lancamento.external_reference || lancamento.id),
+    payment_external_reference: text(lancamento.payment_external_reference || lancamento.id),
     mercado_pago_payment_id: result.paymentId,
     mercado_pago_ticket_url: result.url,
     boleto_url: result.url,

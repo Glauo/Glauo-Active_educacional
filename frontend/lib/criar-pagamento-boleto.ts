@@ -21,7 +21,6 @@ export type CriarPagamentoBoletoInput = {
   transactionAmount: number;
   description: string;
   externalReference: string;
-  dateOfExpiration?: string;
   payer: PagadorBoleto;
   notificationUrl?: string;
   idempotencyKey?: string;
