@@ -21,7 +21,12 @@ function text(value: unknown) {
 }
 
 function normalize(value: unknown) {
-  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return text(value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function asRow(value: unknown): Row {
