@@ -218,6 +218,8 @@ export async function PUT(req: NextRequest) {
       cpf: digits(body.cpf || current.cpf),
       is_active: body.is_active === false ? false : true,
       status: body.is_active === false ? "Inativo" : "Ativo",
+      deleted_at: body.is_active === false ? text(current.deleted_at) || new Date().toISOString() : "",
+      deleted_by: body.is_active === false ? actor : "",
       updated_at: new Date().toISOString(),
       updated_by: actor,
     };
@@ -252,6 +254,8 @@ export async function PUT(req: NextRequest) {
       login: nextLogin || text(current.login),
       status: body.is_active === false ? "Inativo" : "Ativo",
       is_active: body.is_active === false ? false : true,
+      deleted_at: body.is_active === false ? text(current.deleted_at) || new Date().toISOString() : "",
+      deleted_by: body.is_active === false ? actor : "",
       updated_at: new Date().toISOString(),
       updated_by: actor,
     };
@@ -271,6 +275,8 @@ export async function PUT(req: NextRequest) {
         cpf: digits(teachers[idx].cpf),
         is_active: teachers[idx].is_active,
         status: teachers[idx].status,
+        deleted_at: teachers[idx].deleted_at,
+        deleted_by: teachers[idx].deleted_by,
         updated_at: new Date().toISOString(),
         updated_by: actor,
       };
@@ -305,6 +311,8 @@ export async function PUT(req: NextRequest) {
       usuario: nextLogin || text(current.usuario),
       status: body.is_active === false ? "Inativo" : "Ativo",
       is_active: body.is_active === false ? false : true,
+      deleted_at: body.is_active === false ? text(current.deleted_at) || new Date().toISOString() : "",
+      deleted_by: body.is_active === false ? actor : "",
       updated_at: new Date().toISOString(),
       updated_by: actor,
     };
@@ -468,23 +476,50 @@ export async function DELETE(req: NextRequest) {
 
   if (source === "teacher") {
     const [teachers, users] = await Promise.all([dbList<Row>("teachers.json"), dbList<Row>("users.json")]);
-    const teacher = teachers.find((item) => text(item.id || item.nome) === id);
-    const filteredTeachers = teachers.filter((item) => text(item.id || item.nome) !== id);
-    const filteredUsers = users.filter((user) =>
-      text(user.professor_id) !== text(teacher?.id || teacher?.nome) &&
-      lower(user.usuario) !== lower(teacher?.usuario || teacher?.login)
-    );
-    await Promise.all([dbSet("teachers.json", filteredTeachers), dbSet("users.json", filteredUsers)]);
-    await audit({ acao: "excluir_professor", usuario_alvo: text(teacher?.nome || id), actor });
+    const idx = teachers.findIndex((item) => text(item.id || item.nome) === id);
+    if (idx === -1) return NextResponse.json({ error: "Professor nao encontrado." }, { status: 404 });
+    const teacher = teachers[idx];
+    teachers[idx] = {
+      ...teacher,
+      is_active: false,
+      status: "Inativo",
+      deleted_at: new Date().toISOString(),
+      deleted_by: actor,
+    };
+    const updatedUsers = users.map((user) => {
+      if (
+        text(user.professor_id) === text(teacher.id || teacher.nome) ||
+        lower(user.usuario) === lower(teacher.usuario || teacher.login)
+      ) {
+        return {
+          ...user,
+          is_active: false,
+          status: "Inativo",
+          deleted_at: new Date().toISOString(),
+          deleted_by: actor,
+        };
+      }
+      return user;
+    });
+    await Promise.all([dbSet("teachers.json", teachers), dbSet("users.json", updatedUsers)]);
+    await audit({ acao: "inativar_professor", usuario_alvo: text(teacher.nome || id), actor });
     return NextResponse.json({ ok: true });
   }
 
   if (source === "student") {
     const students = await dbList<Row>("students.json");
-    const student = students.find((item) => text(item.id || item.nome) === id);
-    const filteredStudents = students.filter((item) => text(item.id || item.nome) !== id);
-    await dbSet("students.json", filteredStudents);
-    await audit({ acao: "excluir_aluno", usuario_alvo: text(student?.nome || id), actor });
+    const idx = students.findIndex((item) => text(item.id || item.nome) === id);
+    if (idx === -1) return NextResponse.json({ error: "Aluno nao encontrado." }, { status: 404 });
+    const student = students[idx];
+    students[idx] = {
+      ...student,
+      is_active: false,
+      status: "Inativo",
+      deleted_at: new Date().toISOString(),
+      deleted_by: actor,
+    };
+    await dbSet("students.json", students);
+    await audit({ acao: "inativar_aluno", usuario_alvo: text(student.nome || id), actor });
     return NextResponse.json({ ok: true });
   }
 

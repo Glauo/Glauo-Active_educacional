@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
+import { createMercadoPagoBoleto, resolveMercadoPagoBoletoCharge } from "@/lib/mercadopago-boleto";
 import { extractBoletoPdfUrl, extractLinhaDigitavel } from "@/lib/criar-pagamento-boleto";
 import { loadMercadoPagoPayment } from "@/lib/mercadopago-sync";
 
@@ -36,6 +36,17 @@ function paymentStatusAllowsTicket(status: unknown) {
   return value === "pending" || value === "in_process";
 }
 
+function paymentStatusRequiresReplacement(status: unknown) {
+  const value = text(status).toLowerCase();
+  return value === "rejected" || value === "cancelled" || value === "refunded" || value === "charged_back";
+}
+
+function moneyNumber(value: unknown) {
+  const raw = text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+}
+
 function sameStudentInvoice(row: Row, session: { usuario?: string; pessoa?: string }) {
   const invoiceKeys = [
     row.aluno_login,
@@ -50,17 +61,23 @@ function sameStudentInvoice(row: Row, session: { usuario?: string; pessoa?: stri
   return invoiceKeys.some((item) => sessionKeys.includes(item));
 }
 
-function boletoFallbackHtml(lancamento: Row, payment: Row | null) {
+function boletoFallbackHtml(
+  lancamento: Row,
+  payment: Row | null,
+  charge: { baseAmount: number; transactionAmount: number; daysLate: number; finePercent: number; dailyInterestPercent: number } | null = null,
+) {
   const nome = text(lancamento.aluno || lancamento.nome || "Aluno");
   const valor = text(lancamento.valor_parcela || lancamento.valor);
   const linha = text(lancamento.boleto_linha_digitavel || (payment ? extractLinhaDigitavel(payment) : ""));
   const status = text((payment?.status as unknown) || lancamento.mercado_pago_status || "pending");
   const detail = text((payment?.status_detail as unknown) || lancamento.mercado_pago_detail);
   const paymentId = text(payment?.id || lancamento.mercado_pago_payment_id || lancamento.boleto_codigo);
+  const currentValue = charge && charge.transactionAmount > 0 ? charge.transactionAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
+  const originalValue = charge && charge.baseAmount > 0 ? charge.baseAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Boleto Mercado Pago</title><style>
     body{font-family:Arial,sans-serif;background:#f8fafc;color:#172033;margin:0;padding:40px}.box{max-width:760px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;box-shadow:0 18px 45px rgba(15,23,42,.08)}
-    h1{font-size:22px;margin:0 0 10px}.muted{color:#64748b;line-height:1.55}.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-top:18px}textarea{width:100%;min-height:92px;margin-top:8px;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font-family:monospace}
-  </style></head><body><div class="box"><h1>Boleto Mercado Pago</h1><p class="muted">${nome}${valor ? ` - ${valor}` : ""}</p><p class="muted">Status do pagamento no Mercado Pago: <strong>${status}</strong>${detail ? ` (${detail})` : ""}</p>${paymentId ? `<p class="muted">Pagamento MP: <strong>${paymentId}</strong></p>` : ""}${linha ? `<div class="label">Linha digitavel</div><textarea readonly>${linha}</textarea>` : `<p class="muted">O boleto foi criado, mas o Mercado Pago ainda nao devolveu um link publico para abertura. Tente novamente em alguns instantes ou use o botao Verificar pagamento no financeiro.</p>`}</div></body></html>`;
+    h1{font-size:22px;margin:0 0 10px}.muted{color:#64748b;line-height:1.55}.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-top:18px}.note{margin-top:16px;padding:12px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8}textarea{width:100%;min-height:92px;margin-top:8px;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font-family:monospace}
+  </style></head><body><div class="box"><h1>Boleto Mercado Pago</h1><p class="muted">${nome}${valor ? ` - ${valor}` : ""}</p><p class="muted">Status do pagamento no Mercado Pago: <strong>${status}</strong>${detail ? ` (${detail})` : ""}</p>${paymentId ? `<p class="muted">Pagamento MP: <strong>${paymentId}</strong></p>` : ""}${charge ? `<div class="note">Boleto sem validade automatica. Pode ser pago mesmo em atraso.<br/>${charge.daysLate > 0 ? `Valor original: <strong>${originalValue}</strong><br/>Valor atualizado: <strong>${currentValue}</strong><br/>Atraso: <strong>${charge.daysLate} dia(s)</strong> com multa de ${charge.finePercent}% e juros de ${charge.dailyInterestPercent}% ao dia.` : `Valor atual para pagamento: <strong>${currentValue || originalValue}</strong>. Em caso de atraso, aplica multa de ${charge.finePercent}% e juros de ${charge.dailyInterestPercent}% ao dia.`}</div>` : ""}${linha ? `<div class="label">Linha digitavel</div><textarea readonly>${linha}</textarea>` : `<p class="muted">O boleto foi criado, mas o Mercado Pago ainda nao devolveu um link publico para abertura. Tente novamente em alguns instantes ou use o botao Verificar pagamento no financeiro.</p>`}</div></body></html>`;
   return new NextResponse(html, { headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
@@ -78,6 +95,7 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = new URL(req.url).origin;
+  const charge = await resolveMercadoPagoBoletoCharge(lancamento);
   const paymentId = text(lancamento.mercado_pago_payment_id || lancamento.mp_payment_id || lancamento.boleto_codigo);
   if (paymentId) {
     try {
@@ -85,6 +103,19 @@ export async function GET(req: NextRequest) {
       const recoveredUrl = text(extractBoletoPdfUrl(payment));
       const recoveredLinha = text(extractLinhaDigitavel(payment));
       const paymentStatus = text(payment.status || lancamento.mercado_pago_status);
+      const paymentAmount = moneyNumber(payment.transaction_amount);
+      const needsReplacement =
+        paymentStatusRequiresReplacement(paymentStatus) ||
+        (charge.transactionAmount > 0 && paymentAmount > 0 && Math.abs(paymentAmount - charge.transactionAmount) >= 0.01);
+      if (needsReplacement) {
+        const regenerated = await createMercadoPagoBoleto(lancamento, id, origin, { forceNewPayment: true });
+        if (regenerated.ok) {
+          if (regenerated.url) return NextResponse.redirect(regenerated.url);
+          const refreshed = (await dbList<Row>("receivables.json")).find((item) => text(item.id) === id) || lancamento;
+          return boletoFallbackHtml(refreshed, null, charge);
+        }
+        return errorHtml(regenerated.title, regenerated.message, regenerated.detail);
+      }
       if (recoveredUrl) {
         const nextRecebimentos = recebimentos.map((item) => text(item.id) === id ? {
           ...item,
@@ -100,11 +131,11 @@ export async function GET(req: NextRequest) {
         if (paymentStatusAllowsTicket(paymentStatus)) {
           return NextResponse.redirect(recoveredUrl);
         }
-        return boletoFallbackHtml(nextRecebimentos.find((item) => text(item.id) === id) || lancamento, payment);
+        return boletoFallbackHtml(nextRecebimentos.find((item) => text(item.id) === id) || lancamento, payment, charge);
       }
-      return boletoFallbackHtml(lancamento, payment);
+      return boletoFallbackHtml(lancamento, payment, charge);
     } catch {
-      return boletoFallbackHtml(lancamento, null);
+      return boletoFallbackHtml(lancamento, null, charge);
     }
   }
 
@@ -118,7 +149,7 @@ export async function GET(req: NextRequest) {
   if (generated.ok) {
     if (generated.url) return NextResponse.redirect(generated.url);
     const refreshed = (await dbList<Row>("receivables.json")).find((item) => text(item.id) === id) || lancamento;
-    return boletoFallbackHtml(refreshed, null);
+    return boletoFallbackHtml(refreshed, null, charge);
   }
 
   const importedPdf = importedPdfUrl(lancamento, origin);

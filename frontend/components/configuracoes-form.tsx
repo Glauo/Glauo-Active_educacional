@@ -352,7 +352,7 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
               </div>
               <div className="form-group form-group-span2">
                 <label className="form-label">Instruções do boleto</label>
-                <textarea className="form-input form-textarea" rows={3} value={String(boleto.instrucoes || "")} onChange={(e) => bol("instrucoes", e.target.value)} placeholder="Não receber após o vencimento. Multa de 2% e juros de 1% ao mês." />
+                <textarea className="form-input form-textarea" rows={3} value={String(boleto.instrucoes || "")} onChange={(e) => bol("instrucoes", e.target.value)} placeholder="Boleto pode ser pago mesmo após o vencimento. Multa de 10% e juros de 1% ao dia de atraso." />
               </div>
             </div>
           </div>

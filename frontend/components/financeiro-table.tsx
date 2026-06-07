@@ -168,8 +168,16 @@ function LegacyAutoWhatsAppButton({ phone, message, label = "WhatsApp" }: { phon
 }
 
 function boletoPdfHref(lancamento: Lancamento) {
-  const mercadoPago = String(lancamento.mercado_pago_ticket_url || "").trim();
-  if (mercadoPago.startsWith("http")) return mercadoPago;
+  const id = String(lancamento.id || "").trim();
+  const mercadoPagoHistory = Boolean(String(
+    lancamento.mercado_pago_payment_id ||
+    lancamento.mp_payment_id ||
+    lancamento.mercado_pago_ticket_url ||
+    lancamento.boleto_url ||
+    lancamento.boleto_codigo ||
+    ""
+  ).trim());
+  if (id && mercadoPagoHistory) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
   if (lancamento.boleto_pdf_b64 && lancamento.id) return `/api/financeiro/boleto-pdf?id=${encodeURIComponent(String(lancamento.id))}`;
   return String(lancamento.boleto_pdf_url || "");
 }
@@ -203,15 +211,7 @@ function pixHref(lancamento: Lancamento) {
 }
 
 function canOpenMercadoPagoCharge(lancamento: Lancamento) {
-  const status = String(
-    lancamento.payment_status ||
-    lancamento.mercado_pago_status ||
-    lancamento.mp_status ||
-    lancamento.status ||
-    lancamento.situacao ||
-    ""
-  ).toLowerCase();
-  return status !== "rejected" && status !== "cancelled" && !status.includes("recus") && !status.includes("cancel");
+  return Boolean(String(lancamento.id || "").trim());
 }
 
 function financePhone(lancamento: Lancamento) {
@@ -367,6 +367,7 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
     lancamento.boleto_codigo ||
     ""
   ).trim());
+  const openLabel = hasMercadoPagoHistory ? "Abrir boleto" : "Abrir PDF";
 
   async function gerar() {
     if (!id) return;
@@ -393,7 +394,7 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
 
   return (
     <>
-      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{String(lancamento.mercado_pago_ticket_url || "").startsWith("http") ? "Abrir boleto" : "Abrir PDF"}</a>}
+      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{openLabel}</a>}
       <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar boleto MP"}</button>
       <BoletoWhatsAppButton lancamento={lancamento} />
     </>

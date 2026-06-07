@@ -16,6 +16,16 @@ type MercadoPagoCreateOptions = {
   forceNewPayment?: boolean;
 };
 
+export type MercadoPagoBoletoCharge = {
+  baseAmount: number;
+  transactionAmount: number;
+  daysLate: number;
+  finePercent: number;
+  dailyInterestPercent: number;
+  hasPenalty: boolean;
+  dueDate: string;
+};
+
 function text(value: unknown) {
   return String(value || "").trim();
 }
@@ -42,6 +52,10 @@ function moneyNumber(value: unknown) {
   return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : 0;
 }
 
+function roundMoney(value: number) {
+  return Number(value.toFixed(2));
+}
+
 function digits(value: unknown) {
   return text(value).replace(/\D/g, "");
 }
@@ -61,6 +75,60 @@ function firstPresent(...values: unknown[]) {
 
 function compactRow(row: Row) {
   return Object.fromEntries(Object.entries(row).filter(([, value]) => text(value))) as Row;
+}
+
+function parseDateOnly(value: unknown) {
+  const raw = text(value);
+  if (!raw) return null;
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) {
+    const parsed = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), 12);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(raw.includes("T") ? raw : `${raw}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function diffDays(start: Date, end: Date) {
+  const safeStart = new Date(start);
+  const safeEnd = new Date(end);
+  safeStart.setHours(0, 0, 0, 0);
+  safeEnd.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((safeEnd.getTime() - safeStart.getTime()) / 86400000));
+}
+
+function isSettledFinanceStatus(value: unknown) {
+  const status = normalize(value);
+  return status.includes("pago") || status.includes("baixado") || status.includes("liquidado");
+}
+
+function boletoPenaltyRates(_config: Row | null) {
+  return {
+    finePercent: 10,
+    dailyInterestPercent: 1,
+  };
+}
+
+function calculateBoletoCharge(lancamento: Row, config: Row | null): MercadoPagoBoletoCharge {
+  const baseAmount = moneyNumber(lancamento.valor_parcela ?? lancamento.valor);
+  const dueDate = text(lancamento.vencimento || lancamento.data_vencimento);
+  const due = parseDateOnly(dueDate);
+  const alreadyPaid = isSettledFinanceStatus(lancamento.status || lancamento.situacao);
+  const { finePercent, dailyInterestPercent } = boletoPenaltyRates(config);
+  const daysLate = !alreadyPaid && due ? diffDays(due, new Date()) : 0;
+  const hasPenalty = baseAmount > 0 && daysLate > 0;
+  const fineAmount = hasPenalty ? baseAmount * (finePercent / 100) : 0;
+  const dailyInterestAmount = hasPenalty ? baseAmount * (dailyInterestPercent / 100) * daysLate : 0;
+
+  return {
+    baseAmount,
+    transactionAmount: hasPenalty ? roundMoney(baseAmount + fineAmount + dailyInterestAmount) : baseAmount,
+    daysLate,
+    finePercent,
+    dailyInterestPercent,
+    hasPenalty,
+    dueDate,
+  };
 }
 
 function pickNormalized(row: Row, keys: string[]) {
@@ -269,6 +337,11 @@ function formatMercadoPagoErrorDetail(details: unknown) {
   return text(firstCause?.description || row.message || row.error || JSON.stringify(details).slice(0, 220));
 }
 
+export async function resolveMercadoPagoBoletoCharge(lancamento: Row): Promise<MercadoPagoBoletoCharge> {
+  const config = await dbGet<Row>("boleto_config.json");
+  return calculateBoletoCharge(lancamento, config);
+}
+
 export async function createMercadoPagoBoleto(
   lancamento: Row,
   id: string,
@@ -293,8 +366,8 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const amount = moneyNumber(boletoLancamento.valor_parcela ?? boletoLancamento.valor);
-  if (!amount) {
+  const charge = calculateBoletoCharge(boletoLancamento, config);
+  if (!charge.baseAmount) {
     return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar boleto." };
   }
 
@@ -374,7 +447,7 @@ export async function createMercadoPagoBoleto(
     : `active-boleto-${id}`;
   const result = await criarPagamentoBoleto({
     accessToken: token,
-    transactionAmount: amount,
+    transactionAmount: charge.transactionAmount,
     description: text(boletoLancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
     notificationUrl,
@@ -386,6 +459,12 @@ export async function createMercadoPagoBoleto(
       aluno_id: text(boletoLancamento.aluno_id || aluno?.id),
       aluno_login: text(boletoLancamento.aluno_login || aluno?.login || aluno?.usuario),
       regenerated_at: options.forceNewPayment ? new Date().toISOString() : "",
+      boleto_sem_validade: true,
+      valor_original: charge.baseAmount,
+      valor_atualizado: charge.transactionAmount,
+      dias_atraso: charge.daysLate,
+      multa_percentual: charge.finePercent,
+      juros_dia_percentual: charge.dailyInterestPercent,
     },
     payer: {
       email,
@@ -418,6 +497,7 @@ export async function createMercadoPagoBoleto(
       mercado_pago_payment_id: result.paymentId,
       mercado_pago_status: result.status,
       mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
+      mercado_pago_transaction_amount: charge.transactionAmount,
       mercado_pago_ticket_url: result.pdfUrl,
       boleto_url: result.pdfUrl,
       boleto_pdf_url: result.pdfUrl,
@@ -429,7 +509,16 @@ export async function createMercadoPagoBoleto(
       boleto_status: "Mercado Pago",
       boleto_codigo: result.paymentId || text(item.boleto_codigo),
       boleto_gerado_em: new Date().toISOString(),
-      status: text(item.status) || "Boleto gerado",
+      boleto_valor_original: charge.baseAmount,
+      boleto_valor_atualizado: charge.transactionAmount,
+      boleto_dias_atraso: charge.daysLate,
+      boleto_multa_percentual: charge.finePercent,
+      boleto_juros_dia_percentual: charge.dailyInterestPercent,
+      boleto_atualizado_em: new Date().toISOString(),
+      boleto_permite_pagamento_apos_vencimento: true,
+      boleto_sem_validade: true,
+      status: isSettledFinanceStatus(item.status || item.situacao) ? text(item.status || item.situacao) : "Pendente",
+      situacao: isSettledFinanceStatus(item.status || item.situacao) ? text(item.situacao || item.status) : "Pendente",
     };
     savedLancamento = updated;
     return updated;
@@ -607,7 +696,10 @@ export function applyMercadoPagoToLancamento(lancamento: Row, result: Extract<Me
     boleto_status: "Mercado Pago",
     boleto_codigo: result.paymentId,
     boleto_gerado_em: new Date().toISOString(),
-    status: text(lancamento.status) || "Boleto gerado",
+    boleto_permite_pagamento_apos_vencimento: true,
+    boleto_sem_validade: true,
+    status: isSettledFinanceStatus(lancamento.status || lancamento.situacao) ? text(lancamento.status || lancamento.situacao) : "Pendente",
+    situacao: isSettledFinanceStatus(lancamento.status || lancamento.situacao) ? text(lancamento.situacao || lancamento.status) : "Pendente",
   };
 }
 

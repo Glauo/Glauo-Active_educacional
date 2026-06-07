@@ -143,6 +143,7 @@ function findReceivableIndex(receivables: Row[], payment: Row, paymentId: string
       item.external_reference,
       item.payment_external_reference,
       item.mercado_pago_payment_id,
+      item.mercado_pago_previous_payment_id,
       item.mp_payment_id,
       item.boleto_codigo,
       item.pix_codigo,

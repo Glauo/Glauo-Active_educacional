@@ -151,7 +151,7 @@ export default function CredenciaisUsuariosPage() {
   }
 
   async function excluirUsuario(user: ManagedUser) {
-    if (!confirm(`Excluir ${user.nome}? Esta acao pode inativar ou remover o cadastro.`)) return;
+    if (!confirm(`Desativar ${user.nome}? O cadastro sera preservado para historico e auditoria.`)) return;
     const res = await fetch(`/api/usuarios/gestao?source=${encodeURIComponent(user.source)}&id=${encodeURIComponent(user.id)}`, {
       method: "DELETE",
     });
@@ -160,7 +160,7 @@ export default function CredenciaisUsuariosPage() {
       setFeedback(text(data.error || "Erro ao excluir usuario."));
       return;
     }
-    setFeedback(`${user.nome} removido(a) com sucesso.`);
+    setFeedback(`${user.nome} desativado(a) com sucesso.`);
     await carregarTudo();
   }
 
@@ -287,7 +287,7 @@ export default function CredenciaisUsuariosPage() {
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => abrirEdicao(user)}>Editar</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => resetarSenha(user)}>Redefinir senha</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => excluirUsuario(user)}>Excluir</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => excluirUsuario(user)}>Excluir / Desativar</button>
                       </div>
                     </td>
                   </tr>
