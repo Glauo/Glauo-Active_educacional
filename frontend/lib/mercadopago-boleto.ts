@@ -26,6 +26,14 @@ export type MercadoPagoBoletoCharge = {
   dueDate: string;
 };
 
+type MercadoPagoBoletoExpiration = {
+  dateOfExpiration: string;
+  reason: "matching_due_date";
+} | {
+  dateOfExpiration: "";
+  reason: "missing_due_date" | "past_due" | "beyond_mercado_pago_window";
+};
+
 function text(value: unknown) {
   return String(value || "").trim();
 }
@@ -97,6 +105,14 @@ function diffDays(start: Date, end: Date) {
   return Math.max(0, Math.floor((safeEnd.getTime() - safeStart.getTime()) / 86400000));
 }
 
+function isoDateOnly(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function isoExpirationEndOfDay(date: Date) {
+  return `${isoDateOnly(date)}T23:59:59.000-03:00`;
+}
+
 function isSettledFinanceStatus(value: unknown) {
   const status = normalize(value);
   return status.includes("pago") || status.includes("baixado") || status.includes("liquidado");
@@ -106,6 +122,26 @@ function boletoPenaltyRates(_config: Row | null) {
   return {
     finePercent: 10,
     dailyInterestPercent: 1,
+  };
+}
+
+function resolveMercadoPagoBoletoExpiration(lancamento: Row): MercadoPagoBoletoExpiration {
+  const due = parseDateOnly(lancamento.vencimento || lancamento.data_vencimento);
+  if (!due) return { dateOfExpiration: "", reason: "missing_due_date" };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDay = new Date(due);
+  dueDay.setHours(0, 0, 0, 0);
+
+  if (dueDay < today) return { dateOfExpiration: "", reason: "past_due" };
+
+  const daysAhead = Math.floor((dueDay.getTime() - today.getTime()) / 86400000);
+  if (daysAhead > 29) return { dateOfExpiration: "", reason: "beyond_mercado_pago_window" };
+
+  return {
+    dateOfExpiration: isoExpirationEndOfDay(dueDay),
+    reason: "matching_due_date",
   };
 }
 
@@ -442,6 +478,7 @@ export async function createMercadoPagoBoleto(
   }
 
   const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
+  const expiration = resolveMercadoPagoBoletoExpiration(boletoLancamento);
   const idempotencyKey = options.forceNewPayment
     ? `active-boleto-${id}-${Date.now()}`
     : `active-boleto-${id}`;
@@ -450,6 +487,7 @@ export async function createMercadoPagoBoleto(
     transactionAmount: charge.transactionAmount,
     description: text(boletoLancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
+    dateOfExpiration: expiration.dateOfExpiration || undefined,
     notificationUrl,
     idempotencyKey,
     metadata: {
@@ -465,6 +503,9 @@ export async function createMercadoPagoBoleto(
       dias_atraso: charge.daysLate,
       multa_percentual: charge.finePercent,
       juros_dia_percentual: charge.dailyInterestPercent,
+      vencimento_lancamento: text(boletoLancamento.vencimento || boletoLancamento.data_vencimento),
+      vencimento_tecnico_mp: expiration.dateOfExpiration,
+      vencimento_tecnico_mp_regra: expiration.reason,
     },
     payer: {
       email,
@@ -514,6 +555,9 @@ export async function createMercadoPagoBoleto(
       boleto_dias_atraso: charge.daysLate,
       boleto_multa_percentual: charge.finePercent,
       boleto_juros_dia_percentual: charge.dailyInterestPercent,
+      boleto_vencimento_lancamento: text(item.vencimento || item.data_vencimento),
+      boleto_vencimento_tecnico_mp: expiration.dateOfExpiration,
+      boleto_vencimento_tecnico_mp_regra: expiration.reason,
       boleto_atualizado_em: new Date().toISOString(),
       boleto_permite_pagamento_apos_vencimento: true,
       boleto_sem_validade: true,

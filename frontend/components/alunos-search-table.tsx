@@ -39,6 +39,26 @@ type Frequencia = {
   licao_inicio?: string; licao_fim?: string; [k: string]: unknown;
 };
 
+type Certificado = {
+  id?: string;
+  aluno?: string;
+  aluno_id?: string;
+  aluno_login?: string;
+  turma?: string;
+  curso?: string;
+  carga_horaria?: string;
+  data_conclusao?: string;
+  data_emissao?: string;
+  certificado_codigo?: string;
+  instrutor?: string;
+  assinatura_digital?: boolean;
+  assinatura_nome?: string;
+  assinatura_cargo?: string;
+  assinatura_hash?: string;
+  assinatura_emitted_at?: string;
+  [k: string]: unknown;
+};
+
 type DrawerTab = "perfil" | "financeiro" | "pedagogico";
 
 function text(value: unknown): string {
@@ -61,6 +81,13 @@ function formatBRL(v: number) {
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function nowReadable() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date());
 }
 
 function fmtDate(v: unknown) {
@@ -185,6 +212,14 @@ function vipLabel(aluno: Aluno) {
 }
 
 /* ── Envio de documento (recibo/relatorio) ── */
+function assinaturaHashBase(aluno: Aluno, dataConclusao: string) {
+  return [
+    text(aluno.id || aluno.matricula || aluno.login || aluno.nome || aluno.name),
+    dataConclusao || todayISO(),
+    Date.now().toString().slice(-6),
+  ].filter(Boolean).join("-").toUpperCase();
+}
+
 async function sendDoc(canal: "whatsapp" | "email" | "ambos", opts: { telefone?: string; email?: string; assunto?: string; mensagem: string }) {
   const res = await fetch("/api/financeiro/send-doc", {
     method: "POST",
@@ -357,6 +392,215 @@ function RelatorioAlunoModal({ aluno, faturas: faturasRaw, onClose }: { aluno: A
 }
 
 /* ── Acesso do aluno ── */
+function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: () => void }) {
+  const nome = text(aluno.nome || aluno.name || "Aluno");
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [certificado, setCertificado] = useState<Certificado | null>(null);
+  const [curso, setCurso] = useState("Curso de Ingles - Mister Wiz");
+  const [cargaHoraria, setCargaHoraria] = useState("120 horas");
+  const [dataConclusao, setDataConclusao] = useState(todayISO());
+  const [dataEmissao, setDataEmissao] = useState(todayISO());
+  const [instrutor, setInstrutor] = useState("Equipe Pedagogica Mister Wiz");
+  const [assinaturaDigital, setAssinaturaDigital] = useState(true);
+  const [assinaturaNome, setAssinaturaNome] = useState("Direcao Pedagogica Mister Wiz");
+  const [assinaturaCargo, setAssinaturaCargo] = useState("Direcao Pedagogica");
+  const [assinaturaHash, setAssinaturaHash] = useState(() => assinaturaHashBase(aluno, todayISO()));
+
+  async function emitir() {
+    setSaving(true);
+    setFeedback("");
+    setIsError(false);
+    try {
+      const res = await fetch("/api/certificados", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aluno: nome,
+          aluno_id: text(aluno.id),
+          aluno_login: text(aluno.login),
+          turma: text(aluno.turma || aluno.classe),
+          curso,
+          carga_horaria: cargaHoraria,
+          data_conclusao: dataConclusao,
+          data_emissao: dataEmissao,
+          instrutor,
+          assinatura_digital: assinaturaDigital,
+          assinatura_nome: assinaturaDigital ? assinaturaNome : "",
+          assinatura_cargo: assinaturaDigital ? assinaturaCargo : "",
+          assinatura_hash: assinaturaDigital ? assinaturaHash : "",
+          assinatura_emitted_at: assinaturaDigital ? new Date().toISOString() : "",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setIsError(true);
+        setFeedback(String(data.error || "Erro ao emitir certificado."));
+        return;
+      }
+      setCertificado((data.certificado || null) as Certificado | null);
+      setFeedback("Certificado emitido com sucesso.");
+    } catch {
+      setIsError(true);
+      setFeedback("Erro ao emitir certificado.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const assinaturaHashAtual = assinaturaDigital
+    ? (certificado?.assinatura_hash ? text(certificado.assinatura_hash) : assinaturaHash)
+    : "";
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 980, width: "95vw", maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Certificado de Conclusao</div>
+            <div className="modal-subtitle">Mister Wiz - curso de ingles</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-primary btn-sm" onClick={emitir} disabled={saving}>
+              {saving ? "Emitindo..." : "Emitir certificado"}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => printWindow("certificado-conclusao-print", `Certificado - ${nome}`)} disabled={!certificado}>
+              Imprimir / PDF
+            </button>
+            <button className="modal-close" onClick={onClose}>
+              <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </button>
+          </div>
+        </div>
+        <div className="modal-body" style={{ padding: "20px 24px" }}>
+          {feedback && <div className={isError ? "form-error" : "form-success"} style={{ marginBottom: 12 }}>{feedback}</div>}
+          <div className="form-grid" style={{ marginBottom: 18 }}>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Aluno</label>
+              <input className="form-input" value={nome} readOnly />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Curso</label>
+              <input className="form-input" value={curso} onChange={(e) => setCurso(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Carga horaria</label>
+              <input className="form-input" value={cargaHoraria} onChange={(e) => setCargaHoraria(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Data de conclusao</label>
+              <input className="form-input" type="date" value={dataConclusao} onChange={(e) => {
+                setDataConclusao(e.target.value);
+                setAssinaturaHash(assinaturaHashBase(aluno, e.target.value));
+              }} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Data de emissao</label>
+              <input className="form-input" type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} />
+            </div>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Responsavel pela emissao</label>
+              <input className="form-input" value={instrutor} onChange={(e) => setInstrutor(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="drawer-section" style={{ marginBottom: 18 }}>
+            <div className="drawer-section-title">Assinatura digital</div>
+            <div style={{ display: "grid", gap: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.9rem", fontWeight: 600 }}>
+                <input type="checkbox" checked={assinaturaDigital} onChange={(e) => setAssinaturaDigital(e.target.checked)} />
+                Incluir assinatura digital no certificado
+              </label>
+              {assinaturaDigital && (
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Nome da assinatura</label>
+                    <input className="form-input" value={assinaturaNome} onChange={(e) => setAssinaturaNome(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Cargo</label>
+                    <input className="form-input" value={assinaturaCargo} onChange={(e) => setAssinaturaCargo(e.target.value)} />
+                  </div>
+                  <div className="form-group form-group-span2">
+                    <label className="form-label">Codigo/hash de validacao</label>
+                    <input className="form-input" value={assinaturaHash} onChange={(e) => setAssinaturaHash(e.target.value.toUpperCase())} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div id="certificado-conclusao-print" style={{ background: "#fff", border: "2px solid #d4af37", borderRadius: 16, padding: "36px 42px", boxShadow: "inset 0 0 0 6px rgba(212,175,55,0.12)" }}>
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <div style={{ fontSize: "0.86rem", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#7c5d00", marginBottom: 8 }}>
+                Mister Wiz
+              </div>
+              <div style={{ fontSize: "2rem", fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>
+                Certificado de Conclusao
+              </div>
+              <div style={{ fontSize: "0.95rem", color: "#475569" }}>
+                Curso de Ingles
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", marginBottom: 28, color: "#1e293b", lineHeight: 1.8 }}>
+              Certificamos que <strong style={{ fontSize: "1.3rem" }}>{nome}</strong><br />
+              concluiu com aproveitamento o <strong>{curso}</strong>,
+              com carga horaria total de <strong>{cargaHoraria}</strong>,
+              em <strong>{fmtDate(certificado?.data_conclusao || dataConclusao)}</strong>.
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 26 }}>
+              <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Aluno</div>
+                <div style={{ fontWeight: 700 }}>{nome}</div>
+              </div>
+              <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Turma</div>
+                <div style={{ fontWeight: 700 }}>{text(aluno.turma || aluno.classe || "-")}</div>
+              </div>
+              <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Data de emissao</div>
+                <div style={{ fontWeight: 700 }}>{fmtDate(certificado?.data_emissao || dataEmissao)}</div>
+              </div>
+              <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Codigo do certificado</div>
+                <div style={{ fontWeight: 700, fontFamily: "monospace" }}>{text(certificado?.certificado_codigo || "Sera gerado ao emitir")}</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: assinaturaDigital ? "1fr 1fr" : "1fr", gap: 24, alignItems: "end", marginTop: 40 }}>
+              <div>
+                <div style={{ borderTop: "1px solid #0f172a", paddingTop: 10, textAlign: "center" }}>
+                  <div style={{ fontWeight: 700 }}>{instrutor}</div>
+                  <div style={{ fontSize: "0.82rem", color: "#64748b" }}>Responsavel pela emissao</div>
+                </div>
+              </div>
+              {assinaturaDigital && (
+                <div>
+                  <div style={{ borderTop: "1px solid #0f172a", paddingTop: 10, textAlign: "center" }}>
+                    <div style={{ fontWeight: 700 }}>{certificado?.assinatura_nome ? text(certificado.assinatura_nome) : assinaturaNome}</div>
+                    <div style={{ fontSize: "0.82rem", color: "#64748b" }}>
+                      {certificado?.assinatura_cargo ? text(certificado.assinatura_cargo) : assinaturaCargo}
+                    </div>
+                    <div style={{ fontSize: "0.76rem", color: "#0f766e", marginTop: 8, fontFamily: "monospace" }}>
+                      Assinatura digital: {assinaturaHashAtual}
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: 4 }}>
+                      Emitida em {certificado?.assinatura_emitted_at ? fmtDate(certificado.assinatura_emitted_at) : nowReadable()}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AcessoBox({ aluno }: { aluno: Aluno }) {
   const [login, setLogin] = useState(text(aluno.login));
   const [senha, setSenha] = useState(text(aluno.senha));
@@ -403,6 +647,7 @@ function AlunoDrawer({
   const [tab, setTab] = useState<DrawerTab>("perfil");
   const [reciboFatura, setReciboFatura] = useState<Recebimento | null>(null);
   const [showRelatorio, setShowRelatorio] = useState(false);
+  const [showCertificado, setShowCertificado] = useState(false);
   const [baixaFatura, setBaixaFatura] = useState<Recebimento | null>(null);
   const [baixaForma, setBaixaForma] = useState("PIX");
   const [baixaData, setBaixaData] = useState(todayISO());
@@ -814,7 +1059,7 @@ function AlunoDrawer({
                     const pago = isPago(f);
                     const valor = parseValor(f.valor_parcela ?? f.valor);
                     const boletoUrl = text(f.boleto_pdf_url) || (f.id ? `/api/financeiro/boleto?id=${text(f.id)}` : "");
-                    const phone = text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp);
+                    const phone = text(aluno.responsavel_telefone || aluno.telefone || aluno.phone || aluno.celular || aluno.whatsapp);
                     const boletoMsg = `Olá! Segue boleto/fatura do Active Educacional.\n${text(f.descricao || "Mensalidade")}\nVencimento: ${fmtDate(f.vencimento || f.data_vencimento)}\nValor: ${formatBRL(valor)}`;
                     return (
                       <div key={text(f.id || i)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: pago ? "rgba(5,150,105,0.04)" : "var(--surface-raised)", borderRadius: "var(--radius-md)", border: `1px solid ${pago ? "rgba(5,150,105,0.15)" : "var(--border)"}` }}>
@@ -845,10 +1090,30 @@ function AlunoDrawer({
                               Tirar baixa
                             </button>
                           )}
-                          {boletoUrl && (
-                            <a className="btn btn-ghost btn-sm" style={{ fontSize: "0.72rem" }} href={boletoUrl} target="_blank" rel="noreferrer">Boleto</a>
+                          {(boletoUrl || phone) && (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                              {boletoUrl && (
+                                <a
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: "0.72rem" }}
+                                  href={boletoUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Boleto
+                                </a>
+                              )}
+                              {phone && (
+                                <AutoWhatsAppButton
+                                  phone={phone}
+                                  message={financeMessage(f, typeof window !== "undefined" ? window.location.origin : "").body}
+                                  label="WhatsApp boleto"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontSize: "0.72rem", color: "var(--green-700)", borderColor: "rgba(5,150,105,0.24)" }}
+                                />
+                              )}
+                            </div>
                           )}
-                          {phone && <AutoWhatsAppButton phone={phone} message={financeMessage(f, typeof window !== "undefined" ? window.location.origin : "").body} className="btn btn-ghost btn-sm" style={{ fontSize: "0.72rem", color: "var(--green-700)" }} />}
                         </div>
                       </div>
                     );
@@ -970,11 +1235,15 @@ function AlunoDrawer({
         {/* Footer */}
         <div className="drawer-footer">
           <EditarAlunoBtn aluno={aluno} />
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowCertificado(true)}>
+            Certificado Mister Wiz
+          </button>
         </div>
       </div>
 
       {reciboFatura && <ReciboInline fatura={reciboFatura} aluno={aluno} onClose={() => setReciboFatura(null)} />}
       {showRelatorio && <RelatorioAlunoModal aluno={aluno} faturas={faturasOrdenadas} onClose={() => setShowRelatorio(false)} />}
+      {showCertificado && <CertificadoConclusaoModal aluno={aluno} onClose={() => setShowCertificado(false)} />}
     </>
   );
 }

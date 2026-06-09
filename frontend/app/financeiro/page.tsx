@@ -31,7 +31,7 @@ export default async function FinanceiroPage() {
   if (!session) redirect("/login");
 
   if (isAdminOrCoordinator(session)) {
-    await reconcileMercadoPagoPendingReceivables();
+    await reconcileMercadoPagoPendingReceivables({ limit: 4, minIntervalMs: 45_000, lockMs: 90_000 });
   }
 
   let [recebimentos, despesas, alunos, professores, fornecedores, fechamentos] = await Promise.all([

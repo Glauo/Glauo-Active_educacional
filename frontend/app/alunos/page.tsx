@@ -108,7 +108,7 @@ export default async function AlunosPage() {
   if (!session) redirect("/login");
 
   if (isAdminOrCoordinator(session)) {
-    await reconcileMercadoPagoPendingReceivables(8);
+    await reconcileMercadoPagoPendingReceivables({ limit: 1, minIntervalMs: 120_000, lockMs: 60_000 });
   }
 
   const [alunos, recebimentos, todasFrequencias] = await Promise.all([

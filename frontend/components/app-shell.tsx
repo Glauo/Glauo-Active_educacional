@@ -217,7 +217,7 @@ function canSeeNavItem(userRole: string, href: string, blockedRoutes: string[] =
   if (routeBlocked(href, blockedRoutes)) return false;
   if (role.includes("admin") || role.includes("coord") || role.includes("dire")) return true;
   if (role.includes("comercial")) {
-    return ["/", "/alunos", "/financeiro", "/agenda", "/condojob", "/comercial", "/atendimento"].includes(href);
+    return ["/", "/alunos", "/financeiro", "/agenda", "/condojob", "/comercial", "/atendimento", "/wiz"].includes(href);
   }
   if (role.includes("prof")) {
     return ["/", "/agenda", "/turmas", "/mural", "/licoes", "/desafios", "/notas", "/biblioteca"].includes(href);

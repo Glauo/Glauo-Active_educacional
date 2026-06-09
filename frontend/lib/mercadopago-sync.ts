@@ -1,6 +1,24 @@
 import { dbGet, dbList, dbSet } from "@/lib/db";
 
 type Row = Record<string, unknown>;
+type ReconcileState = {
+  running_until?: string;
+  last_run_started_at?: string;
+  last_run_completed_at?: string;
+  last_run_result?: {
+    checked: number;
+    matched: number;
+    paid: number;
+    errors: number;
+  };
+};
+type ReconcileOptions = {
+  limit?: number;
+  minIntervalMs?: number;
+  lockMs?: number;
+  force?: boolean;
+};
+const RECONCILE_STATE_KEY = "mercado_pago_reconcile_state.json";
 
 function text(value: unknown) {
   return String(value || "").trim();
@@ -118,26 +136,29 @@ function candidateReferences(payment: Row) {
   const additional = asRow(payment.additional_info);
   const payer = asRow(payment.payer);
   const payerIdentification = asRow(payer.identification);
-  return Array.from(new Set([
+  const exact = Array.from(new Set([
     payment.id,
     payment.external_reference,
     metadata.lancamento_id,
     metadata.external_reference,
     metadata.invoice_id,
     metadata.installment_id,
+    additional.external_reference,
+    additional.items && Array.isArray(additional.items) ? (additional.items[0] as Row | undefined)?.id : "",
+  ].map(text).filter(Boolean)));
+  const student = Array.from(new Set([
     metadata.aluno_id,
     metadata.aluno_login,
     metadata.aluno,
-    additional.external_reference,
-    additional.items && Array.isArray(additional.items) ? (additional.items[0] as Row | undefined)?.id : "",
     payer.email,
     payerIdentification.number,
   ].map(text).filter(Boolean)));
+  return { exact, student };
 }
 
 function findReceivableIndex(receivables: Row[], payment: Row, paymentId: string) {
   const refs = candidateReferences(payment);
-  return receivables.findIndex((item) => {
+  const exactMatch = receivables.findIndex((item) => {
     const itemRefs = [
       item.id,
       item.external_reference,
@@ -147,16 +168,34 @@ function findReceivableIndex(receivables: Row[], payment: Row, paymentId: string
       item.mp_payment_id,
       item.boleto_codigo,
       item.pix_codigo,
-      item.aluno_id,
-      item.aluno_login,
-      item.email,
-      item.aluno_email,
-      item.cpf,
-      item.cpf_aluno,
-      item.responsavel_cpf,
     ].map(text).filter(Boolean);
-    return itemRefs.includes(paymentId) || refs.some((ref) => itemRefs.includes(ref));
+    return itemRefs.includes(paymentId) || refs.exact.some((ref) => itemRefs.includes(ref));
   });
+  if (exactMatch >= 0) return exactMatch;
+
+  const amount = moneyNumber(payment.transaction_amount);
+  const studentMatches = receivables
+    .map((item, index) => {
+      const studentRefs = [
+        item.aluno_id,
+        item.aluno_login,
+        item.email,
+        item.aluno_email,
+        item.cpf,
+        item.cpf_aluno,
+        item.responsavel_cpf,
+      ].map(text).filter(Boolean);
+      const itemAmount =
+        moneyNumber(item.valor_parcela) ||
+        moneyNumber(item.valor) ||
+        moneyNumber(item.valor_total);
+      const sameStudent = refs.student.some((ref) => studentRefs.includes(ref));
+      const sameAmount = amount > 0 && itemAmount > 0 && Math.abs(itemAmount - amount) < 0.01;
+      return sameStudent && sameAmount ? index : -1;
+    })
+    .filter((index) => index >= 0);
+
+  return studentMatches.length === 1 ? studentMatches[0] : -1;
 }
 
 export type MercadoPagoSyncResult = {
@@ -184,6 +223,21 @@ function minutesSince(value: unknown) {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return Number.POSITIVE_INFINITY;
   return Math.floor((Date.now() - parsed.getTime()) / 60000);
+}
+
+function msSince(value: unknown) {
+  const raw = text(value);
+  if (!raw) return Number.POSITIVE_INFINITY;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return Number.POSITIVE_INFINITY;
+  return Date.now() - parsed.getTime();
+}
+
+function isLockActive(state: ReconcileState | null) {
+  const until = text(state?.running_until);
+  if (!until) return false;
+  const parsed = new Date(until);
+  return !Number.isNaN(parsed.getTime()) && parsed.getTime() > Date.now();
 }
 
 export async function syncMercadoPagoPayment(paymentId: string, source: "webhook" | "manual") : Promise<MercadoPagoSyncResult> {
@@ -312,7 +366,43 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
   return { ok: true, matched: true, paid, paymentId, status, lancamento: next };
 }
 
-export async function reconcileMercadoPagoPendingReceivables(limit = 12) {
+export async function reconcileMercadoPagoPendingReceivables(input: number | ReconcileOptions = 12) {
+  const options = typeof input === "number" ? { limit: input } : input;
+  const limit = Math.max(0, options.limit ?? 12);
+  const minIntervalMs = Math.max(0, options.minIntervalMs ?? 90_000);
+  const lockMs = Math.max(10_000, options.lockMs ?? 120_000);
+  const force = Boolean(options.force);
+  const state = await dbGet<ReconcileState>(RECONCILE_STATE_KEY);
+  if (!force) {
+    if (isLockActive(state)) {
+      return {
+        checked: 0,
+        matched: 0,
+        paid: 0,
+        errors: 0,
+        skipped: true,
+        reason: "lock_active",
+      };
+    }
+    if (msSince(state?.last_run_started_at || state?.last_run_completed_at) < minIntervalMs) {
+      return {
+        checked: 0,
+        matched: 0,
+        paid: 0,
+        errors: 0,
+        skipped: true,
+        reason: "recent_run",
+      };
+    }
+  }
+
+  const now = new Date();
+  await dbSet(RECONCILE_STATE_KEY, {
+    ...(state || {}),
+    last_run_started_at: now.toISOString(),
+    running_until: new Date(now.getTime() + lockMs).toISOString(),
+  } satisfies ReconcileState);
+
   const receivables = await dbList<Row>("receivables.json");
   const candidates = receivables
     .filter((row) => {
@@ -335,23 +425,32 @@ export async function reconcileMercadoPagoPendingReceivables(limit = 12) {
   let paid = 0;
   let errors = 0;
 
-  for (const row of candidates) {
-    const paymentId = text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo);
-    if (!paymentId) continue;
-    checked++;
-    try {
-      const result = await syncMercadoPagoPayment(paymentId, "manual");
-      if (result.matched) matched++;
-      if (result.paid) paid++;
-    } catch (error) {
-      errors++;
-      await audit({
-        acao: "mercado_pago_reconciliacao_automatica_erro",
-        mercado_pago_payment_id: paymentId,
-        lancamento_id: row.id,
-        erro: error instanceof Error ? error.message : String(error),
-      });
+  try {
+    for (const row of candidates) {
+      const paymentId = text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo);
+      if (!paymentId) continue;
+      checked++;
+      try {
+        const result = await syncMercadoPagoPayment(paymentId, "manual");
+        if (result.matched) matched++;
+        if (result.paid) paid++;
+      } catch (error) {
+        errors++;
+        await audit({
+          acao: "mercado_pago_reconciliacao_automatica_erro",
+          mercado_pago_payment_id: paymentId,
+          lancamento_id: row.id,
+          erro: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
+  } finally {
+    await dbSet(RECONCILE_STATE_KEY, {
+      last_run_started_at: now.toISOString(),
+      last_run_completed_at: new Date().toISOString(),
+      running_until: "",
+      last_run_result: { checked, matched, paid, errors },
+    } satisfies ReconcileState);
   }
 
   return { checked, matched, paid, errors };

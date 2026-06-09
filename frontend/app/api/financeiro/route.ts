@@ -179,7 +179,7 @@ export async function GET(req: NextRequest) {
   const tipo = searchParams.get("tipo") || "recebimentos";
   const key = tipo === "despesas" ? "payables.json" : "receivables.json";
   if (tipo !== "despesas") {
-    await reconcileMercadoPagoPendingReceivables(8);
+    await reconcileMercadoPagoPendingReceivables({ limit: 2, minIntervalMs: 60_000, lockMs: 60_000 });
   }
   const raw = searchParams.get("include_pdf") === "true"
     ? await dbList<Record<string, unknown>>(key)

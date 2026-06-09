@@ -3,6 +3,16 @@ import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { migrateModule, teacherClassValueByModule } from "@/lib/course-modules";
 import { saveLibraryPdf, type LibraryPdfKey } from "@/lib/library-pdfs";
+import {
+  SALES_AGENDA_KEY,
+  SALES_LEADS_KEY,
+  leadName,
+  leadPhone,
+  nowIso,
+  normalizeTags,
+  type CommercialAgendaItem,
+  type CommercialLead,
+} from "@/lib/comercial";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { notifyStudentsAboutLaunch } from "@/lib/student-launch-notifications";
@@ -514,6 +524,146 @@ async function createFinancial(data: Row) {
   return { ok: true, message: `Recebimento criado: ${parcelas} parcela(s) para ${aluno}`, items: created };
 }
 
+function extractTime(prompt: string) {
+  const raw = text(prompt.match(/\b(?:as|às)?\s*(\d{1,2}:\d{2})\b/i)?.[1]);
+  return raw || "14:00";
+}
+
+async function createCommercialLead(data: Row, actor: string) {
+  const nome = text(data.nome || data.lead || data.cliente);
+  const telefone = text(data.telefone || data.whatsapp || data.celular);
+  if (!nome) return { ok: false, message: "Informe o nome do lead." };
+  if (!telefone) return { ok: false, message: "Informe o WhatsApp ou telefone do lead." };
+
+  const leads = await dbList<CommercialLead>(SALES_LEADS_KEY);
+  const existing = leads.find((lead) =>
+    normalize(leadName(lead)) === normalize(nome) ||
+    (leadPhone(lead) && normalize(leadPhone(lead)) === normalize(telefone))
+  );
+  if (existing) {
+    return {
+      ok: true,
+      message: `Lead ja cadastrado: ${leadName(existing)}. Etapa atual: ${text(existing.estagio_funil || existing.etapa || "Contato inicial")}.`,
+      lead: existing,
+      reused: true,
+    };
+  }
+
+  const createdAt = nowIso();
+  const lead: CommercialLead = {
+    id: crypto.randomUUID(),
+    nome,
+    telefone,
+    celular: text(data.celular || telefone),
+    whatsapp: text(data.whatsapp || telefone),
+    email: text(data.email).toLowerCase(),
+    status: text(data.status || "Novo contato"),
+    estagio_funil: text(data.estagio_funil || "Contato inicial"),
+    origem: text(data.origem || "Wiz IA"),
+    interesse: text(data.interesse || data.curso || "Matricula"),
+    curso: text(data.curso || data.interesse || "Matricula"),
+    modulo: text(data.modulo),
+    observacao: text(data.observacao || data.detalhes || "Lead registrado pelo Wiz IA Comercial."),
+    vendedor: text(data.vendedor || actor),
+    responsavel: text(data.responsavel || actor),
+    tags: normalizeTags(data.tags || ["Wiz IA", "Prospeccao", "Matricula"]),
+    created_at: createdAt,
+    updated_at: createdAt,
+    ultimo_contato: createdAt,
+    interacoes: [{
+      data_hora: createdAt,
+      canal: "Wiz IA",
+      acao: "Lead cadastrado",
+      descricao: text(data.observacao || data.detalhes || "Lead criado pela interface comercial do Wiz."),
+      pagina: "/wiz",
+    }],
+    landing_pages: [],
+    conversoes: [],
+    campos_personalizados: {},
+  };
+
+  await dbSet(SALES_LEADS_KEY, [...leads, lead]);
+  return {
+    ok: true,
+    message: `Lead cadastrado no comercial: ${leadName(lead)}. Interesse: ${text(lead.interesse)}.`,
+    lead,
+  };
+}
+
+async function createCommercialFollowup(data: Row, actor: string) {
+  const leads = await dbList<CommercialLead>(SALES_LEADS_KEY);
+  const target = findByName(leads as unknown as Row[], data.lead || data.nome || data.lead_nome || data.cliente) as CommercialLead | null;
+  if (!target) return { ok: false, message: "Lead nao encontrado para agendar retorno comercial." };
+
+  const date = extractDate(text(data.data || data.prompt));
+  if (!date) return { ok: false, message: "Informe a data do retorno comercial." };
+  const nowAt = nowIso();
+  const item: CommercialAgendaItem = {
+    id: crypto.randomUUID(),
+    lead_id: text(target.id),
+    lead_nome: leadName(target),
+    lead_telefone: leadPhone(target),
+    tipo: text(data.tipo || "WhatsApp"),
+    data: `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
+    hora: text(data.hora || extractTime(text(data.prompt))) || "14:00",
+    duracao_minutos: Number(data.duracao_minutos) || 45,
+    detalhes: text(data.detalhes || data.observacao || "Follow-up comercial gerado pelo Wiz IA."),
+    status: text(data.status || "Agendado"),
+    vendedor: text(data.vendedor || actor),
+    created_at: nowAt,
+    updated_at: nowAt,
+    whatsapp_sent: false,
+    whatsapp_status: "",
+  };
+  const agenda = await dbList<CommercialAgendaItem>(SALES_AGENDA_KEY);
+  await dbSet(SALES_AGENDA_KEY, [...agenda, item]);
+
+  const updatedLeads = leads.map((lead) => text(lead.id) === text(target.id)
+    ? {
+        ...lead,
+        ultimo_contato: nowAt,
+        updated_at: nowAt,
+        interacoes: [
+          ...(Array.isArray(lead.interacoes) ? lead.interacoes : []),
+          {
+            data_hora: nowAt,
+            canal: "Wiz IA",
+            acao: "Retorno agendado",
+            descricao: `${text(item.tipo)} em ${text(item.data)} as ${text(item.hora)}.`,
+            pagina: "/wiz",
+          },
+        ],
+      }
+    : lead);
+  await dbSet(SALES_LEADS_KEY, updatedLeads);
+
+  return {
+    ok: true,
+    message: `Retorno comercial agendado para ${leadName(target)} em ${text(item.data)} as ${text(item.hora)}.`,
+    item,
+  };
+}
+
+async function prepareCommercialPitch(data: Row, actor: string) {
+  const nome = text(data.nome || data.lead || data.lead_nome || "cliente");
+  const interesse = text(data.interesse || data.curso || "curso de ingles");
+  const origem = text(data.origem || "seu contato");
+  const vendedor = text(data.vendedor || actor);
+  const mensagem = [
+    `Ola, ${firstName(nome)}! Aqui e ${vendedor}, do Mister Wiz / Active Educacional.`,
+    "",
+    `Recebi seu interesse em ${interesse} por ${origem}. Temos uma proposta de matricula com acompanhamento proximo, organizacao clara e suporte rapido para voce iniciar sem burocracia.`,
+    "",
+    "Posso te enviar agora as opcoes de turma, valor da matricula e formas de pagamento para fechar sua vaga ainda hoje?",
+  ].join("\n");
+
+  return {
+    ok: true,
+    message: `Mensagem de prospeccao pronta para ${nome}:\n\n${mensagem}`,
+    sales_message: mensagem,
+  };
+}
+
 async function resetStudentAccess(data: Row, actor: string, session: WizSession) {
   const students = await dbList<Row>("students.json");
   const student = findByName(students, data.aluno || data.nome || data.login || data.id);
@@ -807,6 +957,9 @@ function actionHumanLabel(action: string): string {
     create_student: "cadastrar um aluno",
     create_financial: "lançar um recebimento ou cobrança",
     create_agenda: "adicionar um evento na agenda",
+    create_commercial_lead: "cadastrar um lead comercial",
+    create_commercial_followup: "agendar um retorno comercial",
+    prepare_commercial_pitch: "montar uma mensagem de prospeccao de matricula",
     reset_student_access: "atualizar o acesso de um aluno",
     reset_teacher_access: "atualizar o acesso de um professor",
     answer_student: "responder a dúvida de um aluno",
@@ -987,6 +1140,10 @@ function isClassRegistration(norm: string): boolean {
 function suggestFromPrompt(prompt: string) {
   const norm = lower(prompt);
   if (isClassRegistration(norm)) return "record_teacher_class";
+  if ((norm.includes("lead") || norm.includes("prospecc") || norm.includes("matricula") || norm.includes("crm")) && (norm.includes("agendar") || norm.includes("retorno") || norm.includes("follow"))) return "create_commercial_followup";
+  if (norm.includes("prospecc") && (norm.includes("matricula") || norm.includes("venda") || norm.includes("mister wiz"))) return "prepare_commercial_pitch";
+  if ((norm.includes("mensagem") || norm.includes("texto") || norm.includes("roteiro") || norm.includes("proposta")) && (norm.includes("matricula") || norm.includes("prospecc") || norm.includes("venda") || norm.includes("mister wiz"))) return "prepare_commercial_pitch";
+  if ((norm.includes("lead") || norm.includes("prospecc") || norm.includes("matricula") || norm.includes("venda")) && (norm.includes("cadastr") || norm.includes("criar") || norm.includes("novo") || norm.includes("registr"))) return "create_commercial_lead";
   if (norm.includes("whatsapp") || norm.includes("email") || norm.includes("e-mail") || norm.includes("comunicado") || norm.includes("avisar") || norm.includes("enviar mensagem") || norm.includes("mandar mensagem")) return "send_bulk_message";
   if ((norm.includes("senha") || norm.includes("login") || norm.includes("acesso")) && norm.includes("prof")) return "reset_teacher_access";
   if (norm.includes("senha") || norm.includes("login") || norm.includes("acesso")) return "reset_student_access";
@@ -1068,6 +1225,35 @@ function libraryDataFromPrompt(prompt: string): Row {
   };
 }
 
+function commercialLeadDataFromPrompt(prompt: string): Row {
+  return {
+    nome: extractPromptField(prompt, ["nome", "lead", "cliente"]),
+    telefone: extractPromptField(prompt, ["telefone", "whatsapp", "celular"]),
+    interesse: extractPromptField(prompt, ["interesse", "curso", "matricula", "matrícula"]),
+    origem: extractPromptField(prompt, ["origem", "canal"]),
+    observacao: extractPromptField(prompt, ["observacao", "observação", "detalhes", "resumo"]),
+  };
+}
+
+function commercialFollowupDataFromPrompt(prompt: string): Row {
+  const tipoMatch = prompt.match(/\b(whatsapp|ligacao|ligação|visita|reuniao online|reunião online|matricula|matrícula|retorno)\b/i);
+  return {
+    lead: extractPromptField(prompt, ["lead", "nome", "cliente"]),
+    data: extractPromptField(prompt, ["data"]) || extractDate(prompt),
+    hora: extractPromptField(prompt, ["hora"]) || extractTime(prompt),
+    tipo: text(tipoMatch?.[1] || "WhatsApp"),
+    detalhes: extractPromptField(prompt, ["detalhes", "observacao", "observação"]),
+  };
+}
+
+function commercialPitchDataFromPrompt(prompt: string): Row {
+  return {
+    nome: extractPromptField(prompt, ["lead", "nome", "cliente"]),
+    interesse: extractPromptField(prompt, ["interesse", "curso", "matricula", "matrícula"]),
+    origem: extractPromptField(prompt, ["origem", "canal"]),
+  };
+}
+
 async function answer(prompt: string, actor: string, session: WizSession): Promise<Row> {
   if (!prompt.trim() || isStopCommand(prompt)) {
     return { ok: true, message: randomOf(STOP_REPLIES) };
@@ -1076,6 +1262,18 @@ async function answer(prompt: string, actor: string, session: WizSession): Promi
   if (support) return { ok: true, message: support };
   const action = suggestFromPrompt(prompt);
   if (action === "record_teacher_class") return recordTeacherClass(prompt, actor);
+  if (action === "create_commercial_lead") {
+    if (!canAdmin(session.perfil) && !lower(session.perfil).includes("comercial")) return { ok: false, message: "Sem permissao para cadastrar lead. Fale com um administrador." };
+    return createCommercialLead(commercialLeadDataFromPrompt(prompt), actor);
+  }
+  if (action === "create_commercial_followup") {
+    if (!canAdmin(session.perfil) && !lower(session.perfil).includes("comercial")) return { ok: false, message: "Sem permissao para agenda comercial. Fale com um administrador." };
+    return createCommercialFollowup({ ...commercialFollowupDataFromPrompt(prompt), prompt }, actor);
+  }
+  if (action === "prepare_commercial_pitch") {
+    if (!canAdmin(session.perfil) && !lower(session.perfil).includes("comercial")) return { ok: false, message: "Sem permissao para prospeccao comercial. Fale com um administrador." };
+    return prepareCommercialPitch(commercialPitchDataFromPrompt(prompt), actor);
+  }
   if (action === "send_bulk_message") {
     if (!canAdmin(session.perfil) && !lower(session.perfil).includes("comercial")) return { ok: false, message: "Sem permissao para envio em massa. Fale com um administrador." };
     return sendBulkMessage(communicationDataFromPrompt(prompt), actor, session);
@@ -1089,18 +1287,21 @@ async function answer(prompt: string, actor: string, session: WizSession): Promi
   }
 
   const actionLabels: Record<string, string> = {
-    create_homework: "Me passa o nome da turma, o conteúdo e quantas questões quer — já crio a tarefa!",
-    create_work: "Me informa o título, turma e prazo do trabalho que eu já lanço.",
+    create_homework: "Me passa o nome da turma, o conte?do e quantas quest?es quer ? j? crio a tarefa!",
+    create_work: "Me informa o t?tulo, turma e prazo do trabalho que eu j? lan?o.",
     create_student: "Me passa o nome completo, turma e o livro do aluno que eu cadastro agora.",
-    create_financial: "Me informa o nome do aluno, o valor e quantas parcelas para eu lançar.",
-    create_agenda: "Me diz o título, data e horário do evento para eu agendar.",
+    create_financial: "Me informa o nome do aluno, o valor e quantas parcelas para eu lan?ar.",
+    create_agenda: "Me diz o t?tulo, data e hor?rio do evento para eu agendar.",
+    create_commercial_lead: "Me passa nome, WhatsApp, interesse e origem que eu cadastro o lead no Comercial agora.",
+    create_commercial_followup: "Me informa o nome do lead, a data, hora e o canal do retorno comercial que eu agendo.",
+    prepare_commercial_pitch: "Me passa o nome do lead, interesse e origem que eu monto a mensagem de matricula Mister Wiz.",
     reset_student_access: "Me informa o nome do aluno e eu atualizo o login e senha.",
     reset_teacher_access: "Me informa o nome do professor e eu atualizo o acesso dele.",
-    answer_student: "Me passa o nome do aluno e a dúvida dele que eu respondo!",
-    create_wall_post: "Me diz o título e o texto do comunicado — para qual turma vai?",
-    send_bulk_message: "Me informa a mensagem e para quem enviar (todos, turma ou aluno específico).",
-    add_library_material: "Me passa o título e o link do material que eu cadastro na biblioteca.",
-    record_teacher_class: "Me informa a professora, a turma e a lição para eu registrar a aula.",
+    answer_student: "Me passa o nome do aluno e a d?vida dele que eu respondo!",
+    create_wall_post: "Me diz o t?tulo e o texto do comunicado ? para qual turma vai?",
+    send_bulk_message: "Me informa a mensagem e para quem enviar (todos, turma ou aluno espec?fico).",
+    add_library_material: "Me passa o t?tulo e o link do material que eu cadastro na biblioteca.",
+    record_teacher_class: "Me informa a professora, a turma e a li??o para eu registrar a aula.",
   };
 
   return {
@@ -1156,6 +1357,9 @@ export async function POST(req: NextRequest) {
   else if (action === "create_wall_post") result = await createWallPost(data, actor);
   else if (action === "create_homework") result = await createHomework(data, actor, session);
   else if (action === "create_work") result = await createWork(data, actor, session);
+  else if (action === "create_commercial_lead") result = canAdmin(session.perfil) || lower(session.perfil).includes("comercial") ? await createCommercialLead(data, actor) : { ok: false, message: "Perfil sem permissao para cadastrar lead." };
+  else if (action === "create_commercial_followup") result = canAdmin(session.perfil) || lower(session.perfil).includes("comercial") ? await createCommercialFollowup(data, actor) : { ok: false, message: "Perfil sem permissao para agenda comercial." };
+  else if (action === "prepare_commercial_pitch") result = canAdmin(session.perfil) || lower(session.perfil).includes("comercial") ? await prepareCommercialPitch(data, actor) : { ok: false, message: "Perfil sem permissao para prospeccao comercial." };
   else if (action === "add_library_material") result = canAdmin(session.perfil) || lower(session.perfil).includes("prof") ? await addLibraryMaterial(data, actor, attachedFile) : { ok: false, message: "Perfil sem permissao para cadastrar materiais na biblioteca." };
   else if (action === "create_student") result = canAdmin(session.perfil) || lower(session.perfil).includes("comercial") ? await createStudent(data) : { ok: false, message: "Perfil sem permissao para cadastrar aluno." };
   else if (action === "create_financial") result = canAdmin(session.perfil) || lower(session.perfil).includes("comercial") ? await createFinancial(data) : { ok: false, message: "Perfil sem permissao para financeiro." };

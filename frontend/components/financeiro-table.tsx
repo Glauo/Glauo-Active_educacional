@@ -1156,11 +1156,18 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
 /* ── Tab: Pagamento Professores (por nome do professor) ── */
 function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lancamento[]; canReversePayments: boolean }) {
   const [professor, setProfessor] = useState("todos");
+  const [filtroStatus, setFiltroStatus] = useState("Todos");
   const [relatorioAberto, setRelatorioAberto] = useState(false);
 
   const profDespesas = useMemo(() => despesas.filter(isProfessorPayment), [despesas]);
   const professores = useMemo(() => Array.from(new Set(profDespesas.map(professorLabel))).sort(), [profDespesas]);
-  const filtradas = professor === "todos" ? profDespesas : profDespesas.filter((d) => professorLabel(d) === professor);
+  const filtradas = useMemo(() => profDespesas.filter((d) => {
+    if (professor !== "todos" && professorLabel(d) !== professor) return false;
+    const status = String(d.status || d.situacao || "Pendente");
+    if (filtroStatus === "Em aberto") return statusBadge(status) !== "success";
+    if (filtroStatus === "Pago") return statusBadge(status) === "success";
+    return true;
+  }), [profDespesas, professor, filtroStatus]);
 
   const total = filtradas.reduce((s, d) => s + parseValor(d.valor), 0);
   const totalPago = filtradas.filter((d) => statusBadge(String(d.status || "")) === "success").reduce((s, d) => s + parseValor(d.valor), 0);
@@ -1211,6 +1218,11 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
             <select className="form-input" value={professor} onChange={(e) => setProfessor(e.target.value)} style={{ minWidth: 220 }}>
               <option value="todos">Todos os professores</option>
               {professores.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select className="form-input" value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} style={{ minWidth: 180 }}>
+              <option value="Todos">Todos os status</option>
+              <option value="Em aberto">Em aberto</option>
+              <option value="Pago">Pago</option>
             </select>
             {professor !== "todos" && (
               <button
@@ -1324,7 +1336,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
       {relatorioAberto && relatorioProf && (
         <RelatorioDetalhadoProfModal
           professor={relatorioProf}
-          aulas={profDespesas.filter((d) => professorLabel(d) === relatorioProf)}
+          aulas={filtradas.filter((d) => professorLabel(d) === relatorioProf)}
           onClose={() => { setRelatorioAberto(false); setRelatorioProf(null); }}
         />
       )}

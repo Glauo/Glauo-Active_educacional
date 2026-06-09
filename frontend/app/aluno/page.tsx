@@ -105,7 +105,7 @@ export default async function AlunoHomePage() {
   if (!session) redirect("/aluno/login");
   if (!lower(session.perfil).includes("aluno")) redirect("/");
 
-  await reconcileMercadoPagoPendingReceivables(6);
+  await reconcileMercadoPagoPendingReceivables({ limit: 1, minIntervalMs: 120_000, lockMs: 60_000 });
 
   const [alunos, desafios, conclusoes, notas, frequencias, recebimentos, mensagens, atividades, entregas, agenda, livros, materiais, videos] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),

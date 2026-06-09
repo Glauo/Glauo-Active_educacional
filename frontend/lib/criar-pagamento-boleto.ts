@@ -22,6 +22,7 @@ export type CriarPagamentoBoletoInput = {
   description: string;
   externalReference: string;
   payer: PagadorBoleto;
+  dateOfExpiration?: string;
   notificationUrl?: string;
   idempotencyKey?: string;
   metadata?: Record<string, unknown>;
@@ -169,6 +170,10 @@ export async function criarPagamentoBoleto(
         },
       },
     };
+
+    if (text(input.dateOfExpiration)) {
+      body.date_of_expiration = input.dateOfExpiration;
+    }
 
     const response = await payment.create({
       body,

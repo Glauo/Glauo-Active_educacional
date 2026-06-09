@@ -40,6 +40,34 @@ const QUICK_ACTIONS = [
   },
 ];
 
+const COMMERCIAL_QUICK_ACTIONS = [
+  {
+    label: "Novo lead",
+    icon: "Lead",
+    template: "Cadastrar lead: nome [Nome Completo], telefone [WhatsApp], interesse [Curso ou matricula], origem [Instagram], observacao [Resumo do contato]",
+  },
+  {
+    label: "Retorno comercial",
+    icon: "CRM",
+    template: "Agendar retorno comercial para [Nome do lead] em [DD/MM/AAAA] as [14:00], tipo WhatsApp, detalhes [Follow-up de matricula Mister Wiz]",
+  },
+  {
+    label: "Mensagem matricula",
+    icon: "Venda",
+    template: "Criar mensagem de prospeccao para matricula Mister Wiz para lead [Nome], interesse [Curso], origem [Instagram]",
+  },
+  {
+    label: "Novo aluno",
+    icon: "Aluno",
+    template: "Cadastrar aluno [Nome Completo] na turma [Nome da Turma], livro [Livro 1], telefone [Telefone]",
+  },
+  {
+    label: "Cobranca matricula",
+    icon: "R$",
+    template: "Lancar financeiro de matricula para aluno [Nome], valor [Valor], 1 parcela, vencimento [YYYY-MM-DD]",
+  },
+];
+
 function str(value: unknown) {
   return String(value || "").trim();
 }
@@ -117,18 +145,24 @@ export function WizAssistantClient({
   alunos,
   turmas,
   professores,
+  userRole,
 }: {
   logs: Row[];
   alunos: Row[];
   turmas: Row[];
   professores: Row[];
+  userRole?: string;
 }) {
   const router = useRouter();
+  const isCommercial = str(userRole).toLowerCase().includes("comercial");
+  const visibleQuickActions = isCommercial ? COMMERCIAL_QUICK_ACTIONS : QUICK_ACTIONS;
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "wiz",
-      text: `Olá! Sou o Wiz, assistente operacional do Ativo Educacional.\n\nPosso registrar aulas de professores, cadastrar alunos, criar tarefas, lançar cobranças, enviar comunicados e muito mais.\n\nUse os atalhos abaixo ou descreva o que precisa fazer.`,
+      text: isCommercial
+        ? `Ola! Sou o Wiz IA Comercial do Active Educacional.\n\nPosso cadastrar leads, agendar retornos, preparar mensagem de prospeccao de matricula Mister Wiz, cadastrar alunos e lancar cobrancas.\n\nUse os atalhos abaixo ou descreva a acao comercial que precisa executar.`
+        : `Ola! Sou o Wiz, assistente operacional do Active Educacional.\n\nPosso registrar aulas de professores, cadastrar alunos, criar tarefas, lancar cobrancas, enviar comunicados e muito mais.\n\nUse os atalhos abaixo ou descreva o que precisa fazer.`,
       ts: now(),
     },
   ]);
@@ -273,16 +307,16 @@ export function WizAssistantClient({
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <WizIcon />
               <div>
-                <h3 className="section-title" style={{ margin: 0 }}>Professor Wiz</h3>
-                <p className="section-subtitle" style={{ margin: 0 }}>Assistente operacional — descreva o que precisa fazer</p>
+                <h3 className="section-title" style={{ margin: 0 }}>{isCommercial ? "Wiz IA Comercial" : "Wiz IA"}</h3>
+                <p className="section-subtitle" style={{ margin: 0 }}>{isCommercial ? "Assistente comercial para leads, matriculas e follow-up" : "Assistente operacional - descreva o que precisa fazer"}</p>
               </div>
             </div>
-            <span className="badge badge-success"><span className="badge-dot" />Online</span>
+            <span className="badge badge-success"><span className="badge-dot" />{isCommercial ? "Comercial online" : "Online"}</span>
           </div>
 
           {/* Quick action chips */}
           <div style={{ display: "flex", gap: 8, padding: "10px 16px", flexWrap: "wrap", borderBottom: "1px solid var(--border)", background: "var(--bg-secondary)", flexShrink: 0 }}>
-            {QUICK_ACTIONS.map((action) => (
+            {visibleQuickActions.map((action) => (
               <button
                 key={action.label}
                 onClick={() => applyQuickAction(action.template)}
@@ -358,7 +392,9 @@ export function WizAssistantClient({
               ref={inputRef}
               className="wiz-input"
               rows={2}
-              placeholder={`Ex: Registrar aula da professora Ana na turma Chicago hoje, lição Unit 5\nEnter para enviar · Shift+Enter nova linha`}
+              placeholder={isCommercial
+                ? `Ex: Cadastrar lead: nome [Nome], telefone [WhatsApp], interesse [Matricula], origem [Instagram]\nEnter para enviar · Shift+Enter nova linha`
+                : `Ex: Registrar aula da professora Ana na turma Chicago hoje, lição Unit 5\nEnter para enviar · Shift+Enter nova linha`}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}

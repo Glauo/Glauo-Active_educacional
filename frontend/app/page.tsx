@@ -76,7 +76,7 @@ export default async function DashboardPage() {
   const dashboard = dashboardForPerfil(session.perfil);
   if (dashboard !== "/") redirect(dashboard);
 
-  await reconcileMercadoPagoPendingReceivables(8);
+  await reconcileMercadoPagoPendingReceivables({ limit: 1, minIntervalMs: 120_000, lockMs: 60_000 });
 
   const [alunos, turmas, professores, recebimentos, agenda] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),
