@@ -90,6 +90,10 @@ function nowReadable() {
   }).format(new Date());
 }
 
+function normalizeText(value: unknown) {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 function fmtDate(v: unknown) {
   const raw = text(v);
   if (!raw || raw === "-") return "-";
@@ -218,6 +222,60 @@ function assinaturaHashBase(aluno: Aluno, dataConclusao: string) {
     dataConclusao || todayISO(),
     Date.now().toString().slice(-6),
   ].filter(Boolean).join("-").toUpperCase();
+}
+
+function dueDateWithDay(value: unknown, day: number) {
+  const raw = text(value);
+  if (!raw) return raw;
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const parsed = br
+    ? new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), 12)
+    : new Date(raw.includes("T") ? raw : `${raw}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  const year = parsed.getFullYear();
+  const month = parsed.getMonth();
+  const maxDay = new Date(year, month + 1, 0).getDate();
+  const dueDay = Math.max(1, Math.min(maxDay, Number(day) || parsed.getDate()));
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(dueDay).padStart(2, "0")}`;
+}
+
+function resetBillingPayload() {
+  return {
+    external_reference: "",
+    payment_external_reference: "",
+    mercado_pago_payment_id: "",
+    mp_payment_id: "",
+    mercado_pago_status: "",
+    mercado_pago_detail: "",
+    mercado_pago_transaction_amount: "",
+    mercado_pago_payment_method: "",
+    mercado_pago_ticket_url: "",
+    boleto_url: "",
+    boleto_pdf_url: "",
+    boleto_pdf_public_url: "",
+    boleto_pdf_b64: "",
+    boleto_pdf_mime: "",
+    boleto_pdf_nome: "",
+    boleto_linha_digitavel: "",
+    boleto_status: "",
+    boleto_codigo: "",
+    boleto_gerado_em: "",
+    boleto_valor_original: "",
+    boleto_valor_atualizado: "",
+    boleto_dias_atraso: "",
+    boleto_multa_percentual: "",
+    boleto_juros_dia_percentual: "",
+    boleto_vencimento_lancamento: "",
+    boleto_vencimento_tecnico_mp: "",
+    boleto_vencimento_tecnico_mp_regra: "",
+    boleto_atualizado_em: "",
+    pix_ticket_url: "",
+    pix_qr_code: "",
+    pix_qr_code_base64: "",
+    pix_status: "",
+    pix_codigo: "",
+    pix_gerado_em: "",
+  };
 }
 
 async function sendDoc(canal: "whatsapp" | "email" | "ambos", opts: { telefone?: string; email?: string; assunto?: string; mensagem: string }) {
@@ -601,6 +659,179 @@ function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: 
   );
 }
 
+function EditarBoletosAlunoModal({
+  aluno,
+  faturas,
+  onClose,
+  onSaved,
+}: {
+  aluno: Aluno;
+  faturas: Recebimento[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState("");
+  const [ok, setOk] = useState("");
+  const [categoria, setCategoria] = useState("Mensalidade");
+  const [novoDia, setNovoDia] = useState("25");
+  const [novoValor, setNovoValor] = useState("");
+
+  const abertas = useMemo(() => faturas.filter((f) => !isPago(f)), [faturas]);
+  const alvos = useMemo(() => abertas.filter((f) => {
+    if (categoria === "Todos") return true;
+    const base = normalizeText(`${text(f.categoria)} ${text(f.descricao)}`);
+    return categoria === "Material" ? base.includes("material") : base.includes("mensal");
+  }), [abertas, categoria]);
+
+  async function aplicar() {
+    setErro("");
+    setOk("");
+    if (alvos.length === 0) {
+      setErro("Nenhuma parcela em aberto encontrada para o filtro selecionado.");
+      return;
+    }
+    if (!novoDia.trim() && !novoValor.trim()) {
+      setErro("Informe ao menos o novo dia de vencimento ou o novo valor.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      let updatedCount = 0;
+      for (const alvo of alvos) {
+        const payload: Record<string, unknown> = {
+          id: alvo.id,
+          tipo: "recebimentos",
+        };
+        let changed = false;
+
+        if (novoDia.trim()) {
+          const nextDue = dueDateWithDay(alvo.vencimento || alvo.data_vencimento, Number(novoDia));
+          if (nextDue && nextDue !== text(alvo.vencimento || alvo.data_vencimento)) {
+            payload.vencimento = nextDue;
+            payload.data_vencimento = nextDue;
+            changed = true;
+          }
+        }
+
+        if (novoValor.trim()) {
+          const currentValue = parseValor(alvo.valor_parcela ?? alvo.valor);
+          const nextValue = parseValor(novoValor);
+          if (nextValue > 0 && currentValue !== nextValue) {
+            payload.valor = novoValor;
+            payload.valor_total = novoValor;
+            payload.valor_parcela = novoValor;
+            changed = true;
+          }
+        }
+
+        if (!changed) continue;
+        Object.assign(payload, resetBillingPayload());
+
+        const res = await fetch("/api/financeiro", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(String(data.error || `Erro ao atualizar parcela ${text(alvo.descricao || alvo.id)}`));
+        }
+        updatedCount++;
+      }
+
+      if (updatedCount === 0) {
+        setOk("Nenhuma parcela precisou de alteracao.");
+      } else {
+        setOk(`${updatedCount} parcela(s) atualizada(s). Gere novamente os boletos/Pix que precisarem de nova cobranca.`);
+        onSaved();
+      }
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Erro ao editar parcelas.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 760, width: "95vw" }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Editar boletos do aluno</div>
+            <div className="modal-subtitle">{text(aluno.nome || aluno.name)} - parcelas em aberto</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Categoria</label>
+              <select className="form-input" value={categoria} onChange={(e) => {
+                const next = e.target.value;
+                setCategoria(next);
+                if (!novoDia.trim() || novoDia === "25" || novoDia === "15") setNovoDia(next === "Material" ? "15" : "25");
+              }}>
+                <option>Mensalidade</option>
+                <option>Material</option>
+                <option>Todos</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Novo dia de vencimento</label>
+              <input className="form-input" type="number" min="1" max="31" value={novoDia} onChange={(e) => setNovoDia(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Novo valor (opcional)</label>
+              <input className="form-input" inputMode="decimal" placeholder="Ex: 299,00" value={novoValor} onChange={(e) => setNovoValor(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.18)", color: "var(--gold-700)", fontSize: "0.82rem", marginBottom: 14 }}>
+            Ao alterar vencimento ou valor, o sistema limpa os links antigos de boleto/Pix dessas parcelas para evitar cobranca errada. Depois, gere novamente os boletos que precisar.
+          </div>
+
+          <div style={{ marginBottom: 12, fontSize: "0.84rem", color: "var(--text-secondary)" }}>
+            {alvos.length} parcela(s) em aberto no filtro atual.
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 280, overflowY: "auto" }}>
+            {alvos.map((f, index) => (
+              <div key={text(f.id || index)} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{text(f.descricao || f.categoria || "Parcela")}</div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Vencimento atual: {fmtDate(f.vencimento || f.data_vencimento)} · Valor atual: {formatBRL(parseValor(f.valor_parcela ?? f.valor))}
+                  </div>
+                </div>
+                <span className={`badge badge-${financBadge(text(f.status || f.situacao || "Pendente"))}`}><span className="badge-dot" />{text(f.status || f.situacao || "Pendente")}</span>
+              </div>
+            ))}
+            {alvos.length === 0 && (
+              <div className="empty-state" style={{ padding: "16px 0" }}>
+                <div className="empty-title">Nenhuma parcela encontrada</div>
+                <p className="empty-desc">Troque o filtro para localizar os boletos deste aluno.</p>
+              </div>
+            )}
+          </div>
+
+          {erro && <div className="form-error" style={{ marginTop: 12 }}>{erro}</div>}
+          {ok && <div className="form-success" style={{ marginTop: 12 }}>{ok}</div>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button className="btn btn-primary" onClick={aplicar} disabled={saving || alvos.length === 0}>
+            {saving ? "Salvando..." : "Aplicar nas parcelas"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AcessoBox({ aluno }: { aluno: Aluno }) {
   const [login, setLogin] = useState(text(aluno.login));
   const [senha, setSenha] = useState(text(aluno.senha));
@@ -648,6 +879,7 @@ function AlunoDrawer({
   const [reciboFatura, setReciboFatura] = useState<Recebimento | null>(null);
   const [showRelatorio, setShowRelatorio] = useState(false);
   const [showCertificado, setShowCertificado] = useState(false);
+  const [showEditarBoletos, setShowEditarBoletos] = useState(false);
   const [baixaFatura, setBaixaFatura] = useState<Recebimento | null>(null);
   const [baixaForma, setBaixaForma] = useState("PIX");
   const [baixaData, setBaixaData] = useState(todayISO());
@@ -970,6 +1202,9 @@ function AlunoDrawer({
                 <button className="btn btn-primary btn-sm" onClick={() => { setShowNovoLanc(!showNovoLanc); setMsg(""); }}>
                   {showNovoLanc ? "Cancelar lançamento" : "+ Novo lançamento"}
                 </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowEditarBoletos(true)}>
+                  Editar boletos
+                </button>
                 <ImportarBoletoPdfBtn alunoInicial={aluno} label="Anexar boleto PDF" className="btn btn-secondary btn-sm" />
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowRelatorio(true)}>
                   Relatório / imprimir
@@ -1244,6 +1479,7 @@ function AlunoDrawer({
       {reciboFatura && <ReciboInline fatura={reciboFatura} aluno={aluno} onClose={() => setReciboFatura(null)} />}
       {showRelatorio && <RelatorioAlunoModal aluno={aluno} faturas={faturasOrdenadas} onClose={() => setShowRelatorio(false)} />}
       {showCertificado && <CertificadoConclusaoModal aluno={aluno} onClose={() => setShowCertificado(false)} />}
+      {showEditarBoletos && <EditarBoletosAlunoModal aluno={aluno} faturas={faturasOrdenadas} onClose={() => setShowEditarBoletos(false)} onSaved={() => router.refresh()} />}
     </>
   );
 }
