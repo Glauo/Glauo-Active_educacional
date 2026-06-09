@@ -94,6 +94,10 @@ function normalizeText(value: unknown) {
   return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+function preferredPhone(aluno: Aluno) {
+  return text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp || aluno.phone || aluno.celular);
+}
+
 function fmtDate(v: unknown) {
   const raw = text(v);
   if (!raw || raw === "-") return "-";
@@ -301,7 +305,7 @@ function ReciboInline({ fatura, aluno, onClose }: { fatura: Recebimento; aluno: 
   const valor = parseValor(fatura.valor_parcela ?? fatura.valor);
   const dataBaixa = fatura.data_baixa ? fmtDate(fatura.data_baixa) : new Date().toLocaleDateString("pt-BR");
   const recNum = text(fatura.id || Date.now()).slice(-6).toUpperCase();
-  const telefone = text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp);
+  const telefone = preferredPhone(aluno);
   const email = text(aluno.responsavel_email || aluno.email);
 
   const mensagemRecibo = [
@@ -368,7 +372,7 @@ function RelatorioAlunoModal({ aluno, faturas: faturasRaw, onClose }: { aluno: A
   const nome = text(aluno.nome || aluno.name || "Aluno");
   const total = faturas.reduce((s, f) => s + parseValor(f.valor_parcela ?? f.valor), 0);
   const totalPago = faturas.filter(isPago).reduce((s, f) => s + parseValor(f.valor_parcela ?? f.valor), 0);
-  const telefone = text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp);
+  const telefone = preferredPhone(aluno);
   const email = text(aluno.responsavel_email || aluno.email);
   const hoje = new Date().toLocaleDateString("pt-BR");
   const datas = faturas.map((f) => text(f.vencimento || f.data_vencimento)).filter(Boolean).sort();
@@ -848,7 +852,7 @@ function AcessoBox({ aluno }: { aluno: Aluno }) {
     setSaving(false);
     if (!res.ok) { setFeedback(d.error || "Erro ao alterar acesso."); return; }
     setFeedback(d.whatsapp_enviado ? "Acesso atualizado e enviado automaticamente por WhatsApp." : `Acesso atualizado. WhatsApp nao enviado: ${d.whatsapp_status || "verifique a WAPI"}.`);
-    const phone = text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp || aluno.celular);
+    const phone = preferredPhone(aluno);
     const msg = `Olá, ${text(aluno.nome || aluno.name)}! Seu acesso ao portal Active Educacional foi atualizado.\n\nLogin: ${login}\nSenha: ${senha}\n\nGuarde esses dados com segurança.`;
   }
 
@@ -905,7 +909,7 @@ function AlunoDrawer({
   const modulo = text(aluno.modulo || aluno.modalidade || "-");
   const status = text(aluno.status || aluno.situacao || "Ativo");
   const responsavel = text(aluno.responsavel_nome || aluno.responsavel || "-");
-  const telefone = text(aluno.responsavel_telefone || aluno.telefone || aluno.phone || aluno.celular || "-");
+  const telefone = preferredPhone(aluno) || "-";
   const email = text(aluno.responsavel_email || aluno.email || "-");
   const enderecoFull = [text(aluno.rua), text(aluno.numero), text(aluno.complemento), text(aluno.bairro), text(aluno.cidade), text(aluno.cep)].filter(Boolean).join(", ") || text(aluno.endereco || aluno.address || "-");
   const vip = vipLabel(aluno);
@@ -1018,7 +1022,7 @@ function AlunoDrawer({
         const venc = `${ano}-${String(mes + 1).padStart(2, "0")}-${String(diaEfetivo).padStart(2, "0")}`;
         return {
           aluno: nome, aluno_login: text(aluno.login),
-          telefone: text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp),
+          telefone: preferredPhone(aluno),
           email: text(aluno.responsavel_email || aluno.email),
           descricao: `Mensalidade ${MESES_PT[mes]}/${ano}`,
           categoria: "Mensalidade", valor: lancValor, valor_parcela: lancValor,
@@ -1054,7 +1058,7 @@ function AlunoDrawer({
       body: JSON.stringify({
         tipo_lancamento: "recebimentos",
         aluno: nome, aluno_login: text(aluno.login),
-        telefone: text(aluno.responsavel_telefone || aluno.telefone || aluno.whatsapp),
+        telefone: preferredPhone(aluno),
         email: text(aluno.responsavel_email || aluno.email),
         descricao: lancDescricao || lancCategoria,
         categoria: lancCategoria,
@@ -1294,8 +1298,7 @@ function AlunoDrawer({
                     const pago = isPago(f);
                     const valor = parseValor(f.valor_parcela ?? f.valor);
                     const boletoUrl = text(f.boleto_pdf_url) || (f.id ? `/api/financeiro/boleto?id=${text(f.id)}` : "");
-                    const phone = text(aluno.responsavel_telefone || aluno.telefone || aluno.phone || aluno.celular || aluno.whatsapp);
-                    const boletoMsg = `Olá! Segue boleto/fatura do Active Educacional.\n${text(f.descricao || "Mensalidade")}\nVencimento: ${fmtDate(f.vencimento || f.data_vencimento)}\nValor: ${formatBRL(valor)}`;
+                    const phone = preferredPhone(aluno);
                     return (
                       <div key={text(f.id || i)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: pago ? "rgba(5,150,105,0.04)" : "var(--surface-raised)", borderRadius: "var(--radius-md)", border: `1px solid ${pago ? "rgba(5,150,105,0.15)" : "var(--border)"}` }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1325,30 +1328,31 @@ function AlunoDrawer({
                               Tirar baixa
                             </button>
                           )}
-                          {(boletoUrl || phone) && (
-                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                              {boletoUrl && (
-                                <a
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ fontSize: "0.72rem" }}
-                                  href={boletoUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Boleto
-                                </a>
-                              )}
-                              {phone && (
-                                <AutoWhatsAppButton
-                                  phone={phone}
-                                  message={financeMessage(f, typeof window !== "undefined" ? window.location.origin : "").body}
-                                  label="WhatsApp boleto"
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ fontSize: "0.72rem", color: "var(--green-700)", borderColor: "rgba(5,150,105,0.24)" }}
-                                />
-                              )}
-                            </div>
-                          )}
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                            {boletoUrl && (
+                              <a
+                                className="btn btn-secondary btn-sm"
+                                style={{ fontSize: "0.72rem" }}
+                                href={boletoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Boleto
+                              </a>
+                            )}
+                            <AutoWhatsAppButton
+                              phone={phone}
+                              message={financeMessage(f, typeof window !== "undefined" ? window.location.origin : "").body}
+                              label="WhatsApp boleto"
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: "0.72rem", color: "var(--green-700)", borderColor: "rgba(5,150,105,0.24)" }}
+                            />
+                            {!phone && (
+                              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                Sem WhatsApp no cadastro
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
