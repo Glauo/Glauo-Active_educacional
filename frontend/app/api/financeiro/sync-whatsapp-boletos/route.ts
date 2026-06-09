@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { dbList, dbSet } from "@/lib/db";
+import { dbList, dbSet, dbUpdate } from "@/lib/db";
 import { isAdminOrCoordinator } from "@/lib/roles";
 
 type Row = Record<string, unknown>;
@@ -201,9 +201,13 @@ async function runSync(req: NextRequest, dryRun: boolean) {
 
   if (!dryRun && atualizados > 0) {
     await Promise.all([
-      dbSet("receivables.json", nextReceivables),
-      dbSet("finance_audit.json", [
-        ...audit,
+      dbUpdate<Row[]>("receivables.json", (current) => {
+        const latest = Array.isArray(current) ? current : [];
+        const byId = new Map(nextReceivables.map((item) => [text(item.id), item]));
+        return latest.map((item) => byId.get(text(item.id)) || item);
+      }, []),
+      dbUpdate<Row[]>("finance_audit.json", (items) => [
+        ...(Array.isArray(items) ? items : audit),
         {
           id: crypto.randomUUID(),
           data: now,
@@ -217,7 +221,7 @@ async function runSync(req: NextRequest, dryRun: boolean) {
           sem_whatsapp: semWhatsapp,
           force,
         },
-      ]),
+      ], audit),
     ]);
   }
 

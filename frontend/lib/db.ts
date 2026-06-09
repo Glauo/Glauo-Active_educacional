@@ -110,6 +110,48 @@ export async function dbSet(key: string, value: unknown): Promise<boolean> {
   throw new Error(`Nao foi possivel gravar ${normalizedKey} apos ${RETRIES} tentativas`);
 }
 
+export async function dbUpdate<T = unknown>(
+  key: string,
+  updater: (current: T | null) => T | Promise<T>,
+  fallback: T | null = null,
+): Promise<T> {
+  const pool = getPool();
+  if (!pool) throw new Error(`Banco de dados indisponivel para atualizar ${normalizeKey(key)}`);
+  const normalizedKey = normalizeKey(key);
+
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const res = await client.query<{ value: T }>(
+        "SELECT value FROM active_kv WHERE key = $1 FOR UPDATE",
+        [normalizedKey]
+      );
+      const current = res.rows[0]?.value ?? fallback ?? null;
+      const next = await updater(current);
+      await client.query(
+        `INSERT INTO active_kv (key, value, updated_at)
+         VALUES ($1, $2::jsonb, now())
+         ON CONFLICT (key) DO UPDATE
+           SET value = EXCLUDED.value,
+               updated_at = now()`,
+        [normalizedKey, JSON.stringify(next)]
+      );
+      await client.query("COMMIT");
+      cache().set(normalizedKey, next);
+      return next;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error(`[dbUpdate] Falha ao atualizar ${normalizedKey} tentativa ${attempt}/${RETRIES}`, err);
+      if (attempt < RETRIES) await wait(200 * attempt);
+    } finally {
+      client.release();
+    }
+  }
+
+  throw new Error(`Nao foi possivel atualizar ${normalizedKey} apos ${RETRIES} tentativas`);
+}
+
 export async function dbList<T = unknown>(key: string): Promise<T[]> {
   const result = await dbGet<T[]>(key);
   return Array.isArray(result) ? result : [];

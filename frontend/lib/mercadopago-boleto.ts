@@ -1,4 +1,4 @@
-import { dbGet, dbList, dbSet } from "@/lib/db";
+import { dbGet, dbList, dbSet, dbUpdate } from "@/lib/db";
 import { criarPagamentoBoleto, resolveIdentification } from "@/lib/criar-pagamento-boleto";
 import { criarPagamentoPix } from "@/lib/criar-pagamento-pix";
 
@@ -526,9 +526,8 @@ export async function createMercadoPagoBoleto(
     };
   }
 
-  const recebimentos = await dbList<Row>("receivables.json");
   let savedLancamento: Row = boletoLancamento;
-  const updatedRecebimentos = recebimentos.map((item) => {
+  await dbUpdate<Row[]>("receivables.json", (recebimentos) => (Array.isArray(recebimentos) ? recebimentos : []).map((item) => {
     if (text(item.id) !== id) return item;
     const updated = {
       ...item,
@@ -566,8 +565,7 @@ export async function createMercadoPagoBoleto(
     };
     savedLancamento = updated;
     return updated;
-  });
-  await dbSet("receivables.json", updatedRecebimentos);
+  }), []);
 
   return { ok: true, url: result.pdfUrl, linha: result.linhaDigitavel, paymentId: result.paymentId, lancamento: savedLancamento };
 }
@@ -687,9 +685,8 @@ export async function createMercadoPagoPix(
     };
   }
 
-  const recebimentos = await dbList<Row>("receivables.json");
   let savedLancamento: Row = pixLancamento;
-  const updatedRecebimentos = recebimentos.map((item) => {
+  await dbUpdate<Row[]>("receivables.json", (recebimentos) => (Array.isArray(recebimentos) ? recebimentos : []).map((item) => {
     if (text(item.id) !== id) return item;
     const updated = {
       ...item,
@@ -710,8 +707,7 @@ export async function createMercadoPagoPix(
     };
     savedLancamento = updated;
     return updated;
-  });
-  await dbSet("receivables.json", updatedRecebimentos);
+  }), []);
 
   return {
     ok: true,

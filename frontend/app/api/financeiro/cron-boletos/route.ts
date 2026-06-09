@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbList, dbSet } from "@/lib/db";
+import { dbList, dbSet, dbUpdate } from "@/lib/db";
 import { financeMessage } from "@/lib/finance-message";
 import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -106,8 +106,9 @@ function phoneOf(row: Row, student: Row | null) {
 }
 
 async function updateReceivable(id: string, patch: Row) {
-  const latest = await dbList<Row>("receivables.json");
-  await dbSet("receivables.json", latest.map((item) => text(item.id) === id ? { ...item, ...patch } : item));
+  await dbUpdate<Row[]>("receivables.json", (latest) =>
+    (Array.isArray(latest) ? latest : []).map((item) => text(item.id) === id ? { ...item, ...patch } : item)
+  , []);
 }
 
 async function handleCron(req: NextRequest) {
@@ -194,8 +195,8 @@ async function handleCron(req: NextRequest) {
   }
 
   const audit = await dbList<Row>("finance_audit.json");
-  await dbSet("finance_audit.json", [
-    ...audit,
+  await dbUpdate<Row[]>("finance_audit.json", (items) => [
+    ...(Array.isArray(items) ? items : audit),
     {
       id: crypto.randomUUID(),
       data: new Date().toISOString(),
@@ -210,7 +211,7 @@ async function handleCron(req: NextRequest) {
       ignorados,
       duracao_ms: Date.now() - startedAt,
     },
-  ]);
+  ], audit);
 
   return NextResponse.json({
     ok: true,

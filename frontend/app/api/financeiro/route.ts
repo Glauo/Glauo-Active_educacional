@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbList, dbListWithoutKeys, dbSet } from "@/lib/db";
+import { dbList, dbListWithoutKeys, dbSet, dbUpdate } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
@@ -93,11 +93,10 @@ function ensureFinanceIds(items: Record<string, unknown>[]) {
 }
 
 async function audit(entry: Record<string, unknown>) {
-  const log = await dbList<Record<string, unknown>>("finance_audit.json");
-  await dbSet("finance_audit.json", [
-    ...log,
+  await dbUpdate<Record<string, unknown>[]>("finance_audit.json", (log) => [
+    ...(Array.isArray(log) ? log : []),
     { id: crypto.randomUUID(), data: new Date().toISOString(), ...entry },
-  ]);
+  ], []);
 }
 
 function shouldSendWhatsApp(data: Record<string, unknown>) {
@@ -202,10 +201,6 @@ export async function POST(req: NextRequest) {
     const { tipo = "recebimentos", ...data } = body;
     const key = tipo === "despesas" ? "payables.json" : "receivables.json";
 
-    const current = await dbList<Record<string, unknown>>(key);
-    const repaired = ensureFinanceIds(current);
-    const lancamentos = repaired.items;
-
     if (Array.isArray(data.items) && (data.items as unknown[]).length > 0) {
       const novos = (data.items as Record<string, unknown>[]).map((item) => ({
         ...item,
@@ -213,7 +208,10 @@ export async function POST(req: NextRequest) {
         created_at: new Date().toISOString(),
         created_by: session.pessoa || session.usuario,
       }));
-      await dbSet(key, [...lancamentos, ...novos]);
+      await dbUpdate<Record<string, unknown>[]>(key, (current) => {
+        const repaired = ensureFinanceIds(Array.isArray(current) ? current : []);
+        return [...repaired.items, ...novos];
+      }, []);
       return NextResponse.json({ ok: true, count: novos.length }, { status: 201 });
     }
 
@@ -230,8 +228,10 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString(),
       created_by: session.pessoa || session.usuario
     };
-    lancamentos.push(novo);
-    await dbSet(key, lancamentos);
+    await dbUpdate<Record<string, unknown>[]>(key, (current) => {
+      const repaired = ensureFinanceIds(Array.isArray(current) ? current : []);
+      return [...repaired.items, novo];
+    }, []);
     const origin = new URL(req.url).origin;
 
     if (tipo !== "despesas" && data.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
@@ -250,19 +250,22 @@ export async function POST(req: NextRequest) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
         const result = await sendWhatsApp(phoneOf(novo), message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
         const notificationStatus = { ...(novo.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
+        await dbUpdate<Record<string, unknown>[]>(key, (atualizados) =>
+          ensureFinanceIds(Array.isArray(atualizados) ? atualizados : []).items.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item)
+        , []);
       })(), "whatsapp");
     }
     if (tipo !== "despesas" && shouldSendEmail(data)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
         const result = await sendEmail(emailOf(novo), message.subject, message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
-        const current = atualizados.find((item) => item.id === id) || novo;
-        const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
+        await dbUpdate<Record<string, unknown>[]>(key, (atualizados) => {
+          const latest = ensureFinanceIds(Array.isArray(atualizados) ? atualizados : []).items;
+          const current = latest.find((item) => item.id === id) || novo;
+          const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
+          return latest.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item);
+        }, []);
       })(), "email");
     }
     await audit({
@@ -289,14 +292,12 @@ export async function PUT(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "ID obrigatorio." }, { status: 400 });
 
     const key = tipo === "despesas" ? "payables.json" : "receivables.json";
-    const baseLancamentos = await dbList<Record<string, unknown>>(key);
-    const repairedLancamentos = ensureFinanceIds(baseLancamentos);
-    const lancamentos = repairedLancamentos.items;
-    const idx = lancamentos.findIndex((l) => l.id === id);
+    const baseLancamentos = ensureFinanceIds(await dbList<Record<string, unknown>>(key)).items;
+    const idx = baseLancamentos.findIndex((l) => l.id === id);
     if (idx === -1) return NextResponse.json({ error: "Lancamento nao encontrado." }, { status: 404 });
 
-    const before = { ...lancamentos[idx] };
-    const wasPaid = isPaid(lancamentos[idx].status);
+    const before = { ...baseLancamentos[idx] };
+    const wasPaid = isPaid(baseLancamentos[idx].status);
     const willBePaid = isPaid(updates.status);
     const isReversal = Boolean(updates.estorno);
     if (isReversal && !isAdmin(session)) {
@@ -321,8 +322,8 @@ export async function PUT(req: NextRequest) {
       forma_pagamento: "",
     } : {};
 
-    lancamentos[idx] = {
-      ...lancamentos[idx],
+    const nextLancamento = {
+      ...baseLancamentos[idx],
       ...updates,
       ...pdfUpdate,
       ...estornoUpdate,
@@ -330,10 +331,14 @@ export async function PUT(req: NextRequest) {
       updated_by: session.pessoa || session.usuario,
     };
 
-    const writes: Promise<boolean>[] = [dbSet(key, lancamentos)];
+    const writes: Promise<unknown>[] = [
+      dbUpdate<Record<string, unknown>[]>(key, (current) => {
+        const lancamentos = ensureFinanceIds(Array.isArray(current) ? current : []).items;
+        return lancamentos.map((item) => text(item.id) === id ? { ...item, ...nextLancamento } : item);
+      }, []),
+    ];
     if (!wasPaid && willBePaid) {
-      const recibos = await dbList<Record<string, unknown>>("receipts.json");
-      const lancamento = lancamentos[idx];
+      const lancamento = nextLancamento;
       const recibo = {
         id: crypto.randomUUID(),
         lancamento_id: id,
@@ -348,46 +353,52 @@ export async function PUT(req: NextRequest) {
         gerado_automaticamente: true,
         whatsapp: lancamento.telefone || lancamento.whatsapp || lancamento.professor_telefone || "",
       };
-      writes.push(dbSet("receipts.json", [...recibos, recibo]));
+      writes.push(dbUpdate<Record<string, unknown>[]>("receipts.json", (recibos) => [
+        ...(Array.isArray(recibos) ? recibos : []),
+        recibo,
+      ], []));
     }
 
     await Promise.all(writes);
     const origin = new URL(req.url).origin;
 
     if (tipo !== "despesas" && updates.gerar_boleto && !pdfUpdate.boleto_pdf_url) {
-      const mp = await maybeGenerateMercadoPagoBoleto(lancamentos[idx], id, origin, true, false);
+      const mp = await maybeGenerateMercadoPagoBoleto(nextLancamento, id, origin, true, false);
       if (!mp.ok) {
         return NextResponse.json({
           error: mp.error,
           title: mp.title,
           detail: mp.detail,
-          lancamento: lancamentos[idx],
+          lancamento: nextLancamento,
         }, { status: 422 });
       }
-      lancamentos[idx] = mp.lancamento;
-      await dbSet(key, lancamentos);
+      Object.assign(nextLancamento, mp.lancamento);
     }
 
     if (tipo !== "despesas" && shouldSendWhatsApp(updates)) {
-      const lancamento = { ...lancamentos[idx] };
+      const lancamento = { ...nextLancamento };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
         const result = await sendWhatsApp(phoneOf(lancamento), message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
-        const current = atualizados.find((item) => item.id === id) || lancamento;
-        const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
+        await dbUpdate<Record<string, unknown>[]>(key, (atualizados) => {
+          const latest = ensureFinanceIds(Array.isArray(atualizados) ? atualizados : []).items;
+          const current = latest.find((item) => item.id === id) || lancamento;
+          const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), whatsapp: result.ok ? "enviado_wapi" : result.status };
+          return latest.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item);
+        }, []);
       })(), "whatsapp");
     }
     if (tipo !== "despesas" && shouldSendEmail(updates)) {
-      const lancamento = { ...lancamentos[idx] };
+      const lancamento = { ...nextLancamento };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
         const result = await sendEmail(emailOf(lancamento), message.subject, message.body, session);
-        const atualizados = await dbList<Record<string, unknown>>(key);
-        const current = atualizados.find((item) => item.id === id) || lancamento;
-        const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
-        await dbSet(key, atualizados.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item));
+        await dbUpdate<Record<string, unknown>[]>(key, (atualizados) => {
+          const latest = ensureFinanceIds(Array.isArray(atualizados) ? atualizados : []).items;
+          const current = latest.find((item) => item.id === id) || lancamento;
+          const notificationStatus = { ...(current.notification_status as Record<string, unknown> | undefined), email: result.ok ? "enviado_smtp" : result.status };
+          return latest.map((item) => item.id === id ? { ...item, notification_status: notificationStatus } : item);
+        }, []);
       })(), "email");
     }
     await audit({
@@ -397,9 +408,9 @@ export async function PUT(req: NextRequest) {
       usuario: session.pessoa || session.usuario,
       perfil: session.perfil,
       antes: before,
-      depois: lancamentos[idx],
+      depois: nextLancamento,
     });
-    return NextResponse.json({ ok: true, lancamento: lancamentos[idx] });
+    return NextResponse.json({ ok: true, lancamento: nextLancamento });
   } catch (err) {
     console.error("[financeiro PUT]", err);
     return NextResponse.json({ error: "Erro ao atualizar lancamento." }, { status: 500 });
@@ -416,15 +427,13 @@ export async function DELETE(req: NextRequest) {
   const ids = (idsParam ? idsParam.split(",") : [id]).map((item) => text(item)).filter(Boolean);
   if (ids.length === 0) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
   const key = tipo === "despesas" ? "payables.json" : "receivables.json";
-  const repaired = ensureFinanceIds(await dbList<Record<string, unknown>>(key));
-  const lancamentos = repaired.items;
+  const lancamentos = ensureFinanceIds(await dbList<Record<string, unknown>>(key)).items;
   const selected = lancamentos.filter((l) => ids.includes(text(l.id)));
   const paid = selected.filter((l) => isPaid(l.status));
   if (paid.length > 0) {
     return NextResponse.json({ error: "Lancamento pago nao pode ser excluido. Use estorno/cancelamento auditado." }, { status: 409 });
   }
   const selectedIds = new Set(ids);
-  const filtered = lancamentos.filter((l) => !selectedIds.has(text(l.id)));
   const deleted = lancamentos.filter((l) => selectedIds.has(text(l.id)));
   const actor = text(session.pessoa || session.usuario);
 
@@ -439,11 +448,17 @@ export async function DELETE(req: NextRequest) {
         return true;
       });
     if (tombstones.length > 0) {
-      await dbSet("finance_deleted_keys.json", [...deletedKeys, ...tombstones].slice(-2000));
+      await dbUpdate<Record<string, unknown>[]>("finance_deleted_keys.json", (current) => [
+        ...((Array.isArray(current) ? current : deletedKeys)),
+        ...tombstones,
+      ].slice(-2000), deletedKeys);
     }
   }
 
-  await dbSet(key, filtered);
+  await dbUpdate<Record<string, unknown>[]>(key, (current) => {
+    const latest = ensureFinanceIds(Array.isArray(current) ? current : []).items;
+    return latest.filter((l) => !selectedIds.has(text(l.id)));
+  }, []);
   for (const target of deleted) {
     await audit({
       acao: ids.length > 1 ? "excluir_lancamentos_em_lote" : "excluir_lancamento",
@@ -478,14 +493,13 @@ export async function PATCH(req: NextRequest) {
     const actor = session.pessoa || session.usuario;
     const now = new Date().toISOString();
 
-    const repairedLancamentos = ensureFinanceIds(await dbList<Record<string, unknown>>(key));
-    const lancamentos = repairedLancamentos.items;
+    const lancamentos = ensureFinanceIds(await dbList<Record<string, unknown>>(key)).items;
     const idsSet = new Set(ids);
     const recibosNovos: Record<string, unknown>[] = [];
     let baixados = 0;
     let jaPageos = 0;
 
-    const updated = lancamentos.map((l) => {
+    lancamentos.forEach((l) => {
       if (!idsSet.has(text(l.id))) return l;
       if (isPaid(l.status)) { jaPageos++; return l; }
       baixados++;
@@ -515,13 +529,32 @@ export async function PATCH(req: NextRequest) {
         gerado_automaticamente: true,
         baixa_em_massa: true,
       });
-      return novo;
     });
 
-    const recibosExistentes = await dbList<Record<string, unknown>>("receipts.json");
     await Promise.all([
-      dbSet(key, updated),
-      dbSet("receipts.json", [...recibosExistentes, ...recibosNovos]),
+      dbUpdate<Record<string, unknown>[]>(key, (current) => {
+        const latest = ensureFinanceIds(Array.isArray(current) ? current : []).items;
+        return latest.map((l) => {
+          if (!idsSet.has(text(l.id))) return l;
+          if (isPaid(l.status)) return l;
+          return {
+            ...l,
+            status: "Pago",
+            data_baixa: dataBaixa,
+            valor_pago: valorPago || l.valor_pago || l.valor_parcela || l.valor,
+            forma_pagamento: formaPagamento,
+            banco_destino: bancoDestino,
+            observacao_baixa: observacao,
+            baixa_em_massa: true,
+            updated_at: now,
+            updated_by: actor,
+          };
+        });
+      }, []),
+      dbUpdate<Record<string, unknown>[]>("receipts.json", (recibos) => [
+        ...(Array.isArray(recibos) ? recibos : []),
+        ...recibosNovos,
+      ], []),
     ]);
 
     await audit({

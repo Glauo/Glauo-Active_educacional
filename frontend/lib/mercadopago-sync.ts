@@ -1,4 +1,4 @@
-import { dbGet, dbList, dbSet } from "@/lib/db";
+import { dbGet, dbList, dbSet, dbUpdate } from "@/lib/db";
 
 type Row = Record<string, unknown>;
 type ReconcileState = {
@@ -85,11 +85,10 @@ function boletoToken(config: Row | null) {
 }
 
 async function audit(entry: Row) {
-  const log = await dbList<Row>("finance_audit.json");
-  await dbSet("finance_audit.json", [
-    ...log,
+  await dbUpdate<Row[]>("finance_audit.json", (log) => [
+    ...(Array.isArray(log) ? log : []),
     { id: crypto.randomUUID(), data: new Date().toISOString(), ...entry },
-  ]);
+  ], []);
 }
 
 export async function loadMercadoPagoPayment(paymentId: string) {
@@ -318,8 +317,14 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
     }
   }
 
-  const nextReceivables = receivables.map((item, index) => index === idx ? next : item);
-  const writes: Promise<boolean>[] = [dbSet("receivables.json", nextReceivables)];
+  const writes: Promise<unknown>[] = [
+    dbUpdate<Row[]>("receivables.json", (current) => {
+      const latest = Array.isArray(current) ? current : [];
+      const currentIdx = latest.findIndex((item) => text(item.id) === text(before.id));
+      if (currentIdx === -1) return latest;
+      return latest.map((item, index) => index === currentIdx ? { ...item, ...next } : item);
+    }, []),
+  ];
 
   if (paid) {
     const receipts = await dbList<Row>("receipts.json");
@@ -328,8 +333,8 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
       text(receipt.autenticidade) === `AE-MP-${paymentId}`
     );
     if (!alreadyReceipt) {
-      writes.push(dbSet("receipts.json", [
-        ...receipts,
+      writes.push(dbUpdate<Row[]>("receipts.json", (current) => [
+        ...(Array.isArray(current) ? current : receipts),
         {
           id: crypto.randomUUID(),
           lancamento_id: text(before.id),
@@ -344,7 +349,7 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
           gerado_automaticamente: true,
           mercado_pago_payment_id: paymentId,
         },
-      ]));
+      ], receipts));
     }
   }
 

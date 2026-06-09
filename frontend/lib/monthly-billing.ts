@@ -1,4 +1,4 @@
-import { dbList, dbSet } from "./db";
+import { dbList, dbUpdate } from "./db";
 
 type Row = Record<string, unknown>;
 
@@ -209,25 +209,29 @@ function monthlyRowsForStudent(student: Row, receivables: Row[], actor: Row = {}
 }
 
 export async function ensureStudentMonthlyBilling(student: Row, actor: Row = {}) {
-  const receivables = await dbList<Row>(RECEIVABLES_KEY);
   const deletedKeys = new Set((await dbList<Row>(DELETED_BILLING_KEY)).map((item) => text(item.key)).filter(Boolean));
-  const created = monthlyRowsForStudent(student, receivables, actor, deletedKeys);
-  if (created.length > 0) await dbSet(RECEIVABLES_KEY, [...receivables, ...created]);
+  let created: Row[] = [];
+  await dbUpdate<Row[]>(RECEIVABLES_KEY, (current) => {
+    const receivables = Array.isArray(current) ? current : [];
+    created = monthlyRowsForStudent(student, receivables, actor, deletedKeys);
+    return created.length > 0 ? [...receivables, ...created] : receivables;
+  }, []);
   return created;
 }
 
 export async function ensureStudentsMonthlyBilling(students: Row[], actor: Row = {}) {
-  const receivables = await dbList<Row>(RECEIVABLES_KEY);
   const deletedKeys = new Set((await dbList<Row>(DELETED_BILLING_KEY)).map((item) => text(item.key)).filter(Boolean));
   const created: Row[] = [];
-  let current = receivables;
-  for (const student of students) {
-    const rows = monthlyRowsForStudent(student, current, actor, deletedKeys);
-    if (rows.length > 0) {
-      created.push(...rows);
-      current = [...current, ...rows];
+  await dbUpdate<Row[]>(RECEIVABLES_KEY, (snapshot) => {
+    let current = Array.isArray(snapshot) ? snapshot : [];
+    for (const student of students) {
+      const rows = monthlyRowsForStudent(student, current, actor, deletedKeys);
+      if (rows.length > 0) {
+        created.push(...rows);
+        current = [...current, ...rows];
+      }
     }
-  }
-  if (created.length > 0) await dbSet(RECEIVABLES_KEY, current);
+    return current;
+  }, []);
   return created;
 }
