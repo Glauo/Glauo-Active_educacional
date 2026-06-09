@@ -1,9 +1,6 @@
 ﻿name: Sync principal to main
 
 on:
-  push:
-    branches:
-      - principal
   workflow_dispatch:
 
 permissions:
