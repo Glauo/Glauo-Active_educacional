@@ -759,6 +759,17 @@ export function FinanceiroCommandCenter({
             <h3 className="section-title">Filas prontas para acao</h3>
             <p className="section-subtitle">Abra a fila, confira a mensagem e envie por WhatsApp ou e-mail sem procurar lancamento por lancamento.</p>
           </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setCobranca({ mode: "atrasados", title: "Cobrar atrasados", rows: queues.atrasados })}
+              disabled={queues.atrasados.length === 0}
+              title={queues.atrasados.length === 0 ? "Nao ha cobrancas vencidas em aberto." : ""}
+            >
+              Cobrar vencidos no WhatsApp
+            </button>
+          </div>
         </div>
         <div className="card-body">
           <div className="metric-grid metric-grid-4" style={{ margin: 0 }}>
