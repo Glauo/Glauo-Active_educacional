@@ -3243,6 +3243,35 @@
   font-size: 0.72rem;
 }
 
+.student-logout-btn {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--navy-900);
+  font-size: 0.875rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.student-logout-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: var(--red-700);
+}
+
+.student-logout-btn svg {
+  flex-shrink: 0;
+}
+
 .student-main {
   min-width: 0;
   padding: 28px clamp(16px, 3vw, 36px) 42px;

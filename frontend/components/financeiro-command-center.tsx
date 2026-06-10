@@ -202,10 +202,61 @@ function CobrancaModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState("");
+  const [sendingAll, setSendingAll] = useState(false);
+  const [bulkResult, setBulkResult] = useState("");
+  const [bulkStatus, setBulkStatus] = useState<Record<string, string>>({});
 
   async function copyMessage(id: string, body: string) {
     await navigator.clipboard?.writeText(body);
     setCopied(id);
+  }
+
+  async function sendAllWhatsApp() {
+    if (sendingAll) return;
+    const eligible = rows
+      .map((row, index) => ({ row, id: text(row.id) || `${mode}_${index}`, phone: phoneOf(row), message: smartFinanceMessage(row, mode) }))
+      .filter((item) => item.phone);
+
+    if (eligible.length === 0) {
+      setBulkResult("Nenhum lancamento desta fila tem WhatsApp cadastrado.");
+      return;
+    }
+
+    setSendingAll(true);
+    setBulkResult("");
+    const nextStatus: Record<string, string> = {};
+    let enviados = 0;
+    let falhas = 0;
+
+    for (const item of eligible) {
+      nextStatus[item.id] = "enviando";
+      setBulkStatus({ ...nextStatus });
+      try {
+        const res = await fetch("/api/financeiro/send-doc", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            canal: "whatsapp",
+            telefone: item.phone,
+            assunto: item.message.subject,
+            mensagem: item.message.body,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const status = String(data.results?.whatsapp || data.error || "");
+        const ok = Boolean(res.ok && data.ok);
+        nextStatus[item.id] = ok ? "enviado" : status || "falha";
+        if (ok) enviados += 1;
+        else falhas += 1;
+      } catch {
+        nextStatus[item.id] = "falha";
+        falhas += 1;
+      }
+      setBulkStatus({ ...nextStatus });
+    }
+
+    setSendingAll(false);
+    setBulkResult(`${enviados} cobranca(s) enviada(s) por WhatsApp. ${falhas} falha(s).`);
   }
 
   return (
@@ -221,6 +272,18 @@ function CobrancaModal({
           </button>
         </div>
         <div className="modal-body">
+          {mode === "atrasados" && rows.length > 0 && (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", padding: 12, marginBottom: 12, border: "1px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--surface-raised)" }}>
+              <div>
+                <div style={{ fontWeight: 800, color: "var(--navy-900)" }}>Cobranca em lote por WhatsApp</div>
+                <div style={{ fontSize: "0.84rem", color: "var(--text-secondary)" }}>Envia cobranca apenas para lancamentos vencidos em aberto com telefone cadastrado.</div>
+              </div>
+              <button className="btn btn-primary" type="button" onClick={sendAllWhatsApp} disabled={sendingAll}>
+                {sendingAll ? "Enviando cobrancas..." : "Enviar cobranca por WhatsApp"}
+              </button>
+            </div>
+          )}
+          {bulkResult && <div className={bulkResult.includes("falha") ? "form-error" : "form-success"} style={{ marginBottom: 12 }}>{bulkResult}</div>}
           {rows.length === 0 ? (
             <div className="empty-state">
               <div className="empty-title">Nada pendente nesta fila</div>
@@ -232,6 +295,7 @@ function CobrancaModal({
                 const id = text(row.id) || `${mode}_${index}`;
                 const message = smartFinanceMessage(row, mode);
                 const late = daysLate(row);
+                const rowBulkStatus = text(bulkStatus[id]);
                 return (
                   <div key={id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 12, background: "var(--surface-raised)" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 12, alignItems: "start" }}>
@@ -239,6 +303,7 @@ function CobrancaModal({
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                           <strong style={{ color: "var(--navy-900)" }}>{alunoOf(row)}</strong>
                           <span className={`badge badge-${late > 0 ? "danger" : "warning"}`}><span className="badge-dot" />{late > 0 ? `${late} dias atraso` : text(row.status || "Pendente")}</span>
+                          {rowBulkStatus && <span className={`badge badge-${rowBulkStatus === "enviado" ? "success" : rowBulkStatus === "enviando" ? "info" : "danger"}`}><span className="badge-dot" />{rowBulkStatus === "enviado" ? "WhatsApp enviado" : rowBulkStatus === "enviando" ? "Enviando..." : rowBulkStatus}</span>}
                         </div>
                         <div style={{ color: "var(--text-secondary)", fontSize: "0.84rem", marginTop: 4 }}>
                           {descricaoOf(row)} | {formatBRL(parseValor(row.valor_parcela || row.valor || row.valor_total))} | Venc.: {text(row.vencimento || row.data_vencimento) || "-"}
