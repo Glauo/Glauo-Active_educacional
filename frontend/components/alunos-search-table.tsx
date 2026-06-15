@@ -45,6 +45,7 @@ type Certificado = {
   aluno_id?: string;
   aluno_login?: string;
   turma?: string;
+  modulo?: string;
   curso?: string;
   carga_horaria?: string;
   data_conclusao?: string;
@@ -58,6 +59,8 @@ type Certificado = {
   assinatura_emitted_at?: string;
   [k: string]: unknown;
 };
+
+type CertificateMode = "conclusao" | "modulo";
 
 type DrawerTab = "perfil" | "financeiro" | "pedagogico";
 
@@ -454,14 +457,15 @@ function RelatorioAlunoModal({ aluno, faturas: faturasRaw, onClose }: { aluno: A
 }
 
 /* ── Acesso do aluno ── */
-function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: () => void }) {
+function CertificadoConclusaoModal({ aluno, mode, onClose }: { aluno: Aluno; mode: CertificateMode; onClose: () => void }) {
   const nome = text(aluno.nome || aluno.name || "Aluno");
+  const moduloAluno = text(aluno.modulo || aluno.modalidade || aluno.turma || aluno.classe || "Módulo");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [isError, setIsError] = useState(false);
   const [certificado, setCertificado] = useState<Certificado | null>(null);
-  const [curso, setCurso] = useState("Curso de Ingles - Mister Wiz");
-  const [cargaHoraria, setCargaHoraria] = useState("120 horas");
+  const [curso, setCurso] = useState(mode === "modulo" ? `Módulo ${moduloAluno} - Mister Wiz` : "Curso de Ingles - Mister Wiz");
+  const [cargaHoraria, setCargaHoraria] = useState(mode === "modulo" ? "30 horas" : "120 horas");
   const [dataConclusao, setDataConclusao] = useState(todayISO());
   const [dataEmissao, setDataEmissao] = useState(todayISO());
   const [instrutor, setInstrutor] = useState("Equipe Pedagogica Mister Wiz");
@@ -483,6 +487,8 @@ function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: 
           aluno_id: text(aluno.id),
           aluno_login: text(aluno.login),
           turma: text(aluno.turma || aluno.classe),
+          modulo: moduloAluno,
+          tipo_certificado: mode,
           curso,
           carga_horaria: cargaHoraria,
           data_conclusao: dataConclusao,
@@ -519,10 +525,12 @@ function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: 
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box" style={{ maxWidth: 980, width: "95vw", maxHeight: "90vh", overflowY: "auto" }}>
         <div className="modal-header">
-          <div>
-            <div className="modal-title">Certificado de Conclusao</div>
-            <div className="modal-subtitle">Mister Wiz - curso de ingles</div>
-          </div>
+            <div>
+              <div className="modal-title">{mode === "modulo" ? "Certificado por Modulo" : "Certificado de Conclusao"}</div>
+              <div className="modal-subtitle">
+                {mode === "modulo" ? `Mister Wiz - ${moduloAluno}` : "Mister Wiz - curso de ingles"}
+              </div>
+            </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn btn-primary btn-sm" onClick={emitir} disabled={saving}>
               {saving ? "Emitindo..." : "Emitir certificado"}
@@ -598,20 +606,20 @@ function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: 
               <div style={{ fontSize: "0.86rem", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#7c5d00", marginBottom: 8 }}>
                 Mister Wiz
               </div>
-              <div style={{ fontSize: "2rem", fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>
-                Certificado de Conclusao
+                <div style={{ fontSize: "2rem", fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>
+                {mode === "modulo" ? "Certificado por Modulo" : "Certificado de Conclusao"}
+                </div>
+                <div style={{ fontSize: "0.95rem", color: "#475569" }}>
+                {mode === "modulo" ? `Modulo ${moduloAluno}` : "Curso de Ingles"}
+                </div>
               </div>
-              <div style={{ fontSize: "0.95rem", color: "#475569" }}>
-                Curso de Ingles
-              </div>
-            </div>
 
-            <div style={{ textAlign: "center", marginBottom: 28, color: "#1e293b", lineHeight: 1.8 }}>
-              Certificamos que <strong style={{ fontSize: "1.3rem" }}>{nome}</strong><br />
-              concluiu com aproveitamento o <strong>{curso}</strong>,
+              <div style={{ textAlign: "center", marginBottom: 28, color: "#1e293b", lineHeight: 1.8 }}>
+                Certificamos que <strong style={{ fontSize: "1.3rem" }}>{nome}</strong><br />
+              {mode === "modulo" ? "concluiu com aproveitamento o módulo" : "concluiu com aproveitamento o"} <strong>{curso}</strong>,
               com carga horaria total de <strong>{cargaHoraria}</strong>,
               em <strong>{fmtDate(certificado?.data_conclusao || dataConclusao)}</strong>.
-            </div>
+              </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 26 }}>
               <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
@@ -619,8 +627,8 @@ function CertificadoConclusaoModal({ aluno, onClose }: { aluno: Aluno; onClose: 
                 <div style={{ fontWeight: 700 }}>{nome}</div>
               </div>
               <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
-                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Turma</div>
-                <div style={{ fontWeight: 700 }}>{text(aluno.turma || aluno.classe || "-")}</div>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>{mode === "modulo" ? "Módulo" : "Turma"}</div>
+                <div style={{ fontWeight: 700 }}>{mode === "modulo" ? moduloAluno : text(aluno.turma || aluno.classe || "-")}</div>
               </div>
               <div style={{ padding: "12px 14px", border: "1px solid #e2e8f0", borderRadius: 10 }}>
                 <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#64748b", marginBottom: 4 }}>Data de emissao</div>
@@ -883,6 +891,7 @@ function AlunoDrawer({
   const [reciboFatura, setReciboFatura] = useState<Recebimento | null>(null);
   const [showRelatorio, setShowRelatorio] = useState(false);
   const [showCertificado, setShowCertificado] = useState(false);
+  const [showCertificadoModulo, setShowCertificadoModulo] = useState(false);
   const [showEditarBoletos, setShowEditarBoletos] = useState(false);
   const [baixaFatura, setBaixaFatura] = useState<Recebimento | null>(null);
   const [baixaForma, setBaixaForma] = useState("PIX");
@@ -1475,14 +1484,18 @@ function AlunoDrawer({
         <div className="drawer-footer">
           <EditarAlunoBtn aluno={aluno} />
           <button className="btn btn-secondary btn-sm" onClick={() => setShowCertificado(true)}>
-            Certificado Mister Wiz
+            Certificado Conclusão
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowCertificadoModulo(true)}>
+            Certificado Módulo
           </button>
         </div>
       </div>
 
       {reciboFatura && <ReciboInline fatura={reciboFatura} aluno={aluno} onClose={() => setReciboFatura(null)} />}
       {showRelatorio && <RelatorioAlunoModal aluno={aluno} faturas={faturasOrdenadas} onClose={() => setShowRelatorio(false)} />}
-      {showCertificado && <CertificadoConclusaoModal aluno={aluno} onClose={() => setShowCertificado(false)} />}
+      {showCertificado && <CertificadoConclusaoModal aluno={aluno} mode="conclusao" onClose={() => setShowCertificado(false)} />}
+      {showCertificadoModulo && <CertificadoConclusaoModal aluno={aluno} mode="modulo" onClose={() => setShowCertificadoModulo(false)} />}
       {showEditarBoletos && <EditarBoletosAlunoModal aluno={aluno} faturas={faturasOrdenadas} onClose={() => setShowEditarBoletos(false)} onSaved={() => router.refresh()} />}
     </>
   );

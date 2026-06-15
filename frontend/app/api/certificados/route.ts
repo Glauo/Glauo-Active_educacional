@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const alunoId = text(searchParams.get("aluno_id"));
   const aluno = text(searchParams.get("aluno"));
+  const tipo = text(searchParams.get("tipo"));
   const certificados = await dbList<Row>("certificates.json");
 
   if (session.perfil === "Aluno") {
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
   }
 
   const filtrados = certificados.filter((item) => {
+    if (tipo && text(item.tipo_certificado) !== tipo) return false;
     if (alunoId && text(item.aluno_id) === alunoId) return true;
     if (aluno && text(item.aluno).toLowerCase() === aluno.toLowerCase()) return true;
     return !alunoId && !aluno;
@@ -50,6 +52,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json() as Row;
   const aluno = text(body.aluno);
   const alunoId = text(body.aluno_id);
+  const tipoCertificado = text(body.tipo_certificado || "conclusao");
+  const modulo = text(body.modulo);
   const curso = text(body.curso || "Curso de Ingles - Mister Wiz");
   const dataConclusao = text(body.data_conclusao || new Date().toISOString().slice(0, 10));
 
@@ -69,6 +73,7 @@ export async function POST(req: NextRequest) {
     aluno_id: alunoId,
     aluno_login: text(body.aluno_login),
     turma: text(body.turma),
+    modulo,
     curso,
     carga_horaria: text(body.carga_horaria || "120 horas"),
     data_conclusao: dataConclusao,
@@ -80,7 +85,8 @@ export async function POST(req: NextRequest) {
     updated_at: now,
     created_at: text(existingIndex >= 0 ? certificados[existingIndex].created_at : now) || now,
     marca: "Mister Wiz",
-    origem: "certificado_conclusao_curso_ingles",
+    tipo_certificado: tipoCertificado,
+    origem: tipoCertificado === "modulo" ? "certificado_modulo_curso_ingles" : "certificado_conclusao_curso_ingles",
   };
 
   const next = existingIndex >= 0
