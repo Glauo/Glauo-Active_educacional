@@ -24,6 +24,18 @@ function isPaid(value: unknown) {
   return status.includes("pago") || status.includes("baixado") || status.includes("liquidado");
 }
 
+function hasMercadoPagoLink(row: Record<string, unknown>) {
+  return Boolean(
+    text(row.mercado_pago_payment_id) ||
+    text(row.mp_payment_id) ||
+    text(row.mercado_pago_ticket_url) ||
+    text(row.boleto_url) ||
+    text(row.boleto_pdf_url) ||
+    text(row.pix_codigo) ||
+    text(row.boleto_codigo)
+  );
+}
+
 function lower(value: unknown) {
   return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
@@ -312,6 +324,7 @@ export async function PUT(req: NextRequest) {
       boleto_pdf_url: `/api/financeiro/boleto-pdf?id=${encodeURIComponent(id)}`,
       boleto_pdf_mime: text(updates.boleto_pdf_mime) || "application/pdf",
     } : {};
+    const shouldLockMercadoPagoManualSettlement = tipo !== "despesas" && !isReversal && !wasPaid && willBePaid && hasMercadoPagoLink(baseLancamentos[idx]);
     const estornoUpdate = isReversal ? {
       status: "Pendente",
       estornado_em: new Date().toISOString(),
@@ -320,6 +333,14 @@ export async function PUT(req: NextRequest) {
       data_baixa: "",
       valor_pago: "",
       forma_pagamento: "",
+      mercado_pago_manual_lock: false,
+      mercado_pago_manual_lock_at: "",
+      mercado_pago_manual_lock_by: "",
+    } : {};
+    const manualSettlementLockUpdate = shouldLockMercadoPagoManualSettlement ? {
+      mercado_pago_manual_lock: true,
+      mercado_pago_manual_lock_at: new Date().toISOString(),
+      mercado_pago_manual_lock_by: session.pessoa || session.usuario,
     } : {};
 
     const nextLancamento = {
@@ -327,6 +348,7 @@ export async function PUT(req: NextRequest) {
       ...updates,
       ...pdfUpdate,
       ...estornoUpdate,
+      ...manualSettlementLockUpdate,
       updated_at: new Date().toISOString(),
       updated_by: session.pessoa || session.usuario,
     };
@@ -546,6 +568,9 @@ export async function PATCH(req: NextRequest) {
             banco_destino: bancoDestino,
             observacao_baixa: observacao,
             baixa_em_massa: true,
+            mercado_pago_manual_lock: tipo !== "despesas" && hasMercadoPagoLink(l),
+            mercado_pago_manual_lock_at: tipo !== "despesas" && hasMercadoPagoLink(l) ? now : text(l.mercado_pago_manual_lock_at),
+            mercado_pago_manual_lock_by: tipo !== "despesas" && hasMercadoPagoLink(l) ? actor : text(l.mercado_pago_manual_lock_by),
             updated_at: now,
             updated_by: actor,
           };

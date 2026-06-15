@@ -51,6 +51,10 @@ function isSettledStatus(status: unknown) {
   return value.includes("pago") || value.includes("baixado") || value.includes("liquidado") || value === "approved";
 }
 
+function isManualSettlementLocked(row: Row) {
+  return Boolean(row.mercado_pago_manual_lock) && isSettledStatus(row.status || row.situacao);
+}
+
 function paymentMetadata(payment: Row) {
   return payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
     ? payment.metadata as Row
@@ -280,6 +284,7 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
     moneyNumber(before.valor);
   const nextStatus = mappedFinanceStatus(status);
   const alreadySettled = isSettledStatus(before.status || before.situacao);
+  const manualSettlementLocked = isManualSettlementLocked(before);
 
   const next: Row = {
     ...before,
@@ -309,7 +314,7 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
     next.valor_pago = paidAmount || text(before.valor_pago);
     next.forma_pagamento = paymentMethodLabel(payment);
     next.baixado_por = text(before.baixado_por) || "Mercado Pago";
-  } else {
+  } else if (!manualSettlementLocked) {
     next.status = nextStatus;
     next.situacao = nextStatus;
     if (!alreadySettled) {
@@ -356,7 +361,11 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
   await Promise.all(writes);
 
   await audit({
-    acao: paid && !alreadySettled ? "baixar_pagamento_mercado_pago" : "atualizar_status_mercado_pago",
+    acao: manualSettlementLocked && !paid
+      ? "ignorar_status_mercado_pago_por_baixa_manual"
+      : paid && !alreadySettled
+        ? "baixar_pagamento_mercado_pago"
+        : "atualizar_status_mercado_pago",
     origem: source,
     tipo: "recebimentos",
     lancamento_id: before.id,
@@ -413,6 +422,7 @@ export async function reconcileMercadoPagoPendingReceivables(input: number | Rec
     .filter((row) => {
       const paymentId = text(row.mercado_pago_payment_id || row.mp_payment_id || row.boleto_codigo || row.pix_codigo);
       if (!paymentId) return false;
+      if (isManualSettlementLocked(row)) return false;
       if (!isOpenFinanceStatus(row.status || row.situacao)) return false;
       if (isTerminalMercadoPagoStatus(row.payment_status || row.mercado_pago_status || row.mp_status)) return false;
       return minutesSince(row.last_payment_check_at) >= 2;
