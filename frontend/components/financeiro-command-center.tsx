@@ -719,7 +719,8 @@ export function FinanceiroCommandCenter({
           <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1fr) auto", gap: 16, alignItems: "start" }}>
             <div>
               <div className="section-eyebrow">Centro de comando financeiro</div>
-              <h3 className="section-title" style={{ fontSize: "1.35rem", marginBottom: 8 }}>Tudo em ate 3 cliques</h3>
+              <h3 className="section-title" style={{ fontSize: "1.35rem", marginBottom: 8 }}>Resumo, cobranças e ação rápida</h3>
+              <p className="section-subtitle" style={{ marginBottom: 12 }}>Use a busca, acompanhe os valores principais e entre direto nas filas de cobrança e boletos.</p>
               <div className="search-bar" style={{ width: "100%", maxWidth: 620 }}>
                 <span className="search-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg></span>
                 <input className="search-input" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar aluno, boleto, professor, turma, CPF ou descricao..." style={{ minWidth: 260 }} />

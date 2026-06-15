@@ -789,6 +789,16 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
 
   const grupos = useMemo(() => groupByMes(filtrados), [filtrados]);
   const totalGeral = filtrados.reduce((s, r) => s + valorParcela(r), 0);
+  const totalPago = filtrados
+    .filter((r) => statusBadge(String(r.status || r.situacao || "")) === "success")
+    .reduce((s, r) => s + valorParcela(r), 0);
+  const totalAberto = filtrados
+    .filter((r) => statusBadge(String(r.status || r.situacao || "")) !== "success")
+    .reduce((s, r) => s + valorParcela(r), 0);
+  const totalAtrasado = filtrados
+    .filter((r) => diasAtraso(r) > 0)
+    .reduce((s, r) => s + valorParcela(r), 0);
+  const quantidadeAtrasada = filtrados.filter((r) => diasAtraso(r) > 0).length;
   const idsExcluiveis = useMemo(() => filtrados
     .filter((r) => r.id && statusBadge(String(r.status || r.situacao || "")) !== "success")
     .map((r) => String(r.id)), [filtrados]);
@@ -828,21 +838,36 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
 
   return (
     <>
+      <div className="metric-grid metric-grid-4">
+        <div className="metric-card metric-card-blue">
+          <div className="metric-label">Lançamentos no filtro</div>
+          <div className="metric-value">{filtrados.length}</div>
+          <div className="metric-note">{grupos.length} mês(es) exibido(s)</div>
+        </div>
+        <div className="metric-card metric-card-green">
+          <div className="metric-label">Recebido</div>
+          <div className="metric-value" style={{ fontSize: "1.35rem" }}>{formatBRL(totalPago)}</div>
+          <div className="metric-note">Parcelas pagas no filtro</div>
+        </div>
+        <div className="metric-card metric-card-gold">
+          <div className="metric-label">Em aberto</div>
+          <div className="metric-value" style={{ fontSize: "1.35rem" }}>{formatBRL(totalAberto)}</div>
+          <div className="metric-note">Pendências ainda abertas</div>
+        </div>
+        <div className="metric-card metric-card-red">
+          <div className="metric-label">Em atraso</div>
+          <div className="metric-value" style={{ fontSize: "1.35rem" }}>{formatBRL(totalAtrasado)}</div>
+          <div className="metric-note">{quantidadeAtrasada} parcela(s) vencida(s)</div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="toolbar">
           <div className="toolbar-left">
             <div className="search-bar">
               <span className="search-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg></span>
-              <input className="search-input" placeholder="Buscar aluno ou descriÃ§Ã£o..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <input className="search-input" placeholder="Buscar aluno, descriÃ§Ã£o ou cÃ³digo..." value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
-          </div>
-          <div className="toolbar-right">
-            <button className="btn btn-secondary btn-sm" onClick={toggleTodos} disabled={idsExcluiveis.length === 0}>
-              {todosSelecionados ? "Limpar selecao" : "Selecionar abertas"}
-            </button>
-            <button className="btn btn-danger btn-sm" onClick={excluirSelecionados} disabled={excluindo || selecionadosValidos.length === 0}>
-              {excluindo ? "Excluindo..." : `Excluir selecionadas${selecionadosValidos.length ? ` (${selecionadosValidos.length})` : ""}`}
-            </button>
             <select className="filter-select" value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
               <option value="Todos">Todos os status</option>
               <option>Em aberto</option>
@@ -855,6 +880,17 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
               <option>MÃªs passado</option>
             </select>
           </div>
+          <div className="toolbar-right">
+            <button className="btn btn-secondary btn-sm" onClick={toggleTodos} disabled={idsExcluiveis.length === 0}>
+              {todosSelecionados ? "Limpar selecao" : "Selecionar abertas"}
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={excluirSelecionados} disabled={excluindo || selecionadosValidos.length === 0}>
+              {excluindo ? "Excluindo..." : `Excluir selecionadas${selecionadosValidos.length ? ` (${selecionadosValidos.length})` : ""}`}
+            </button>
+          </div>
+        </div>
+        <div style={{ padding: "0 20px 16px", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+          ExcluÃ­a em lote apenas parcelas abertas. Parcelas pagas continuam protegidas e exigem estorno antes de qualquer remoÃ§Ã£o.
         </div>
         {erroExclusao && <div className="form-error" style={{ margin: "0 20px 16px" }}>{erroExclusao}</div>}
       </div>
@@ -897,7 +933,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
               </div>
               <div className="card-body" style={{ paddingTop: 0, paddingBottom: 0 }}>
                 <table className="data-table">
-                  <thead><tr><th>Aluno / DescriÃ§Ã£o</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>AÃ§Ãµes</th></tr></thead>
+                  <thead><tr><th>SeleÃ§Ã£o</th><th>Aluno / DescriÃ§Ã£o</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>AÃ§Ãµes</th></tr></thead>
                   <tbody>
                     {grupo.items.map((r, i) => {
                       const nome = String(r.aluno || r.nome || r.descricao || `LanÃ§amento ${i + 1}`);
@@ -909,17 +945,16 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                       return (
                         <tr key={String(r.id || i)}>
                           <td>
-                            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                              <input
-                                type="checkbox"
-                                aria-label={`Selecionar ${nome}`}
-                                checked={id ? selecionados.includes(id) : false}
-                                onChange={() => id && toggleSelecionado(id)}
-                                disabled={!podeExcluir}
-                                title={podeExcluir ? "Selecionar para excluir" : "Parcelas pagas exigem estorno"}
-                              />
-                              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700 }}>Selecionar</span>
-                            </label>
+                            <input
+                              type="checkbox"
+                              aria-label={`Selecionar ${nome}`}
+                              checked={id ? selecionados.includes(id) : false}
+                              onChange={() => id && toggleSelecionado(id)}
+                              disabled={!podeExcluir}
+                              title={podeExcluir ? "Selecionar para excluir" : "Parcelas pagas exigem estorno"}
+                            />
+                          </td>
+                          <td>
                             <div className="table-name-cell">
                               <span className="table-name-primary">{nome}</span>
                               {r.codigo && <span className="table-name-secondary">{String(r.codigo)}</span>}
