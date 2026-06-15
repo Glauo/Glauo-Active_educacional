@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -74,7 +74,7 @@ function fmtDate(v: string) {
   return d.toLocaleDateString("pt-BR");
 }
 
-function printWindow(elementId: string, title = "Relatório — Ativo Educacional") {
+function printWindow(elementId: string, title = "RelatÃ³rio â€” Ativo Educacional") {
   const el = document.getElementById(elementId);
   if (!el) return;
   const w = window.open("", "_blank", "width=960,height=700");
@@ -119,7 +119,7 @@ function isProfessorPayment(d: Lancamento) {
   const all = [d.aluno, d.nome, d.descricao, d.tipo, d.categoria, d.tipo_origem]
     .map((v) => String(v || "").toLowerCase())
     .join(" ");
-  return all.includes("professor") || all.includes("salário") || all.includes("salario") || all.includes("docente") || all.includes("pagto prof") || all.includes("aula_professor");
+  return all.includes("professor") || all.includes("salÃ¡rio") || all.includes("salario") || all.includes("docente") || all.includes("pagto prof") || all.includes("aula_professor");
 }
 
 function professorLabel(d: Lancamento) {
@@ -315,7 +315,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
   );
 }
 
-/* ── Agrupamento por mês ── */
+/* â”€â”€ Agrupamento por mÃªs â”€â”€ */
 function mesKey(venc: string) {
   const d = parseBRDate(venc);
   if (isNaN(d.getTime())) return "sem-data";
@@ -480,7 +480,7 @@ function VerificarPagamentoBtn({ lancamento }: { lancamento: Lancamento }) {
   );
 }
 
-/* ── Recibo ── */
+/* â”€â”€ Recibo â”€â”€ */
 function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose: () => void }) {
   const nome = String(lancamento.aluno || lancamento.nome || "Pagante");
   const descricao = String(lancamento.descricao || "");
@@ -496,7 +496,7 @@ function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose:
         <div className="modal-header">
           <div className="modal-title">Recibo de Pagamento</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => printWindow("recibo-print", "Recibo — Ativo Educacional")}>
+            <button className="btn btn-secondary btn-sm" onClick={() => printWindow("recibo-print", "Recibo â€” Ativo Educacional")}>
               <svg viewBox="0 0 20 20" fill="currentColor" width={14} height={14}>
                 <path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a1 1 0 001 1h8a1 1 0 001-1v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a1 1 0 00-1-1H6a1 1 0 00-1 1zm2 0h6v3H7V4zm0 8H6v4h8v-4h-7v1a1 1 0 102 0v-1z" clipRule="evenodd" />
               </svg>
@@ -514,7 +514,7 @@ function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose:
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 24px", marginBottom: 20 }}>
             <div>
-              <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 4 }}>Recibo nº</div>
+              <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 4 }}>Recibo nÂº</div>
               <div style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "1rem" }}>{recNum}</div>
             </div>
             <div>
@@ -527,7 +527,7 @@ function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose:
             </div>
             <div style={{ gridColumn: "span 2" }}>
               <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 4 }}>Referente a</div>
-              <div style={{ color: "var(--text-secondary)" }}>{descricao || "Mensalidade / Serviços Educacionais"}</div>
+              <div style={{ color: "var(--text-secondary)" }}>{descricao || "Mensalidade / ServiÃ§os Educacionais"}</div>
             </div>
           </div>
           <div style={{ padding: "20px 24px", background: "linear-gradient(135deg, rgba(5,150,105,0.06), rgba(5,150,105,0.02))", borderRadius: "var(--radius-lg)", border: "2px solid rgba(5,150,105,0.15)", textAlign: "center", marginBottom: 20 }}>
@@ -535,7 +535,7 @@ function ReciboModal({ lancamento, onClose }: { lancamento: Lancamento; onClose:
             <div style={{ fontSize: "2.25rem", fontWeight: 800, color: "var(--green-700)", letterSpacing: "-0.03em" }}>{formatBRL(valor)}</div>
           </div>
           <div style={{ borderTop: "1px dashed var(--border)", paddingTop: 14, textAlign: "center" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--text-faint)" }}>Ativo Educacional {new Date().getFullYear()} - Sistema de Gestão Educacional</div>
+            <div style={{ fontSize: "0.75rem", color: "var(--text-faint)" }}>Ativo Educacional {new Date().getFullYear()} - Sistema de GestÃ£o Educacional</div>
             <div style={{ fontSize: "0.7rem", color: "var(--text-faint)", marginTop: 3 }}>Este recibo confirma o pagamento do valor acima especificado.</div>
           </div>
         </div>
@@ -557,7 +557,7 @@ function ReciboBtn({ lancamento, label = "Recibo" }: { lancamento: Lancamento; l
   );
 }
 
-/* ── Relatório Detalhado do Professor ── */
+/* â”€â”€ RelatÃ³rio Detalhado do Professor â”€â”€ */
 function RelatorioDetalhadoProfModal({
   professor,
   aulas,
@@ -592,15 +592,15 @@ function RelatorioDetalhadoProfModal({
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-box" style={{ maxWidth: 820, width: "95vw", maxHeight: "92vh", overflowY: "auto" }}>
         <div className="modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div className="modal-title">Relatório de Pagamento — Professor</div>
+          <div className="modal-title">RelatÃ³rio de Pagamento â€” Professor</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary btn-sm" onClick={() => printWindow("relatorio-professor-print", `Relatório — ${professor}`)}>
+            <button className="btn btn-primary btn-sm" onClick={() => printWindow("relatorio-professor-print", `RelatÃ³rio â€” ${professor}`)}>
               <svg viewBox="0 0 20 20" fill="currentColor" width={14} height={14} style={{ marginRight: 4 }}>
                 <path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a1 1 0 001 1h8a1 1 0 001-1v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a1 1 0 00-1-1H6a1 1 0 00-1 1zm2 0h6v3H7V4zm0 8H6v4h8v-4h-7v1a1 1 0 102 0v-1z" clipRule="evenodd" />
               </svg>
               Imprimir / PDF
             </button>
-            {telefone && <AutoWhatsAppButton phone={telefone} message={`Relatório de aulas — ${professor}\nPeríodo: ${periodo}\nTotal: ${formatBRL(total)}`} />}
+            {telefone && <AutoWhatsAppButton phone={telefone} message={`RelatÃ³rio de aulas â€” ${professor}\nPerÃ­odo: ${periodo}\nTotal: ${formatBRL(total)}`} />}
             <button className="modal-close" onClick={onClose}>
               <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
             </button>
@@ -608,11 +608,11 @@ function RelatorioDetalhadoProfModal({
         </div>
 
         <div className="modal-body" id="relatorio-professor-print" style={{ padding: "28px 32px" }}>
-          {/* Cabeçalho */}
+          {/* CabeÃ§alho */}
           <div style={{ textAlign: "center", borderBottom: "3px solid var(--navy-900)", paddingBottom: 18, marginBottom: 24 }}>
             <div style={{ fontWeight: 900, fontSize: "1.5rem", color: "var(--navy-900)", letterSpacing: "-0.02em" }}>ATIVO EDUCACIONAL</div>
             <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.14em", marginTop: 4 }}>
-              Relatório de Pagamento de Professor
+              RelatÃ³rio de Pagamento de Professor
             </div>
           </div>
 
@@ -623,12 +623,12 @@ function RelatorioDetalhadoProfModal({
               <div style={{ fontWeight: 700, fontSize: "1.125rem", color: "var(--navy-900)" }}>{professor}</div>
             </div>
             <div>
-              <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 3 }}>Data de emissão</div>
+              <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 3 }}>Data de emissÃ£o</div>
               <div style={{ fontWeight: 600 }}>{hoje}</div>
             </div>
             {periodo && (
               <div style={{ gridColumn: "span 3" }}>
-                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 3 }}>Período</div>
+                <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 3 }}>PerÃ­odo</div>
                 <div style={{ fontWeight: 600, textTransform: "capitalize" }}>{periodo}</div>
               </div>
             )}
@@ -644,27 +644,27 @@ function RelatorioDetalhadoProfModal({
                 <tr style={{ background: "var(--navy-900)", color: "#fff" }}>
                   <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Data</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Turma</th>
-                  <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Horário</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>HorÃ¡rio</th>
                   <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Local</th>
-                  <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Lição / Módulo</th>
-                  <th style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Duração</th>
+                  <th style={{ padding: "9px 12px", textAlign: "left", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>LiÃ§Ã£o / MÃ³dulo</th>
+                  <th style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>DuraÃ§Ã£o</th>
                   <th style={{ padding: "9px 12px", textAlign: "right", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Valor</th>
                   <th style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {aulasOrdenadas.map((a, i) => {
-                  const dataAula = String(a.data_aula || a.vencimento || a.data_vencimento || "—");
-                  const licao = [a.licao_inicio, a.licao_fim ? `a ${a.licao_fim}` : ""].filter(Boolean).join(" ") || String(a.modulo || a.descricao || "—");
-                  const dur = a.duracao_minutos ? `${a.duracao_minutos} min` : "—";
+                  const dataAula = String(a.data_aula || a.vencimento || a.data_vencimento || "â€”");
+                  const licao = [a.licao_inicio, a.licao_fim ? `a ${a.licao_fim}` : ""].filter(Boolean).join(" ") || String(a.modulo || a.descricao || "â€”");
+                  const dur = a.duracao_minutos ? `${a.duracao_minutos} min` : "â€”";
                   const status = String(a.status || a.situacao || "Pendente");
                   const isPago = statusBadge(status) === "success";
                   return (
                     <tr key={String(a.id || i)} style={{ background: i % 2 === 0 ? "transparent" : "var(--surface-raised)", borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "9px 12px", fontWeight: 600 }}>{dataAula !== "—" ? fmtDate(dataAula) : "—"}</td>
-                      <td style={{ padding: "9px 12px" }}>{String(a.turma || "—")}</td>
-                      <td style={{ padding: "9px 12px" }}>{String(a.horario || "—")}</td>
-                      <td style={{ padding: "9px 12px" }}>{String(a.local || "—")}</td>
+                      <td style={{ padding: "9px 12px", fontWeight: 600 }}>{dataAula !== "â€”" ? fmtDate(dataAula) : "â€”"}</td>
+                      <td style={{ padding: "9px 12px" }}>{String(a.turma || "â€”")}</td>
+                      <td style={{ padding: "9px 12px" }}>{String(a.horario || "â€”")}</td>
+                      <td style={{ padding: "9px 12px" }}>{String(a.local || "â€”")}</td>
                       <td style={{ padding: "9px 12px", color: "var(--text-secondary)" }}>{licao}</td>
                       <td style={{ padding: "9px 12px", textAlign: "center", color: "var(--text-secondary)" }}>{dur}</td>
                       <td style={{ padding: "9px 12px", textAlign: "right", fontWeight: 700 }}>{formatBRL(parseValor(a.valor))}</td>
@@ -690,7 +690,7 @@ function RelatorioDetalhadoProfModal({
                 </tr>
                 {totalPago > 0 && (
                   <tr>
-                    <td colSpan={6} style={{ padding: "4px 12px", color: "var(--green-700)", fontSize: "0.82rem" }}>Já pago</td>
+                    <td colSpan={6} style={{ padding: "4px 12px", color: "var(--green-700)", fontSize: "0.82rem" }}>JÃ¡ pago</td>
                     <td style={{ padding: "4px 12px", textAlign: "right", fontWeight: 700, color: "var(--green-700)", fontSize: "0.82rem" }}>{formatBRL(totalPago)}</td>
                     <td />
                   </tr>
@@ -712,19 +712,19 @@ function RelatorioDetalhadoProfModal({
               <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>Valor Total a Receber</div>
               <div style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--green-700)", letterSpacing: "-0.03em" }}>{formatBRL(total)}</div>
               <div style={{ marginTop: 6, fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                {aulas.length} aulas · Período: {periodo || "—"}
+                {aulas.length} aulas Â· PerÃ­odo: {periodo || "â€”"}
               </div>
             </div>
             <div style={{ padding: "16px 20px", border: "1.5px solid var(--border)", borderRadius: "var(--radius-md)", background: "var(--surface-raised)" }}>
               <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>Forma de Pagamento</div>
-              <div style={{ fontWeight: 600, fontSize: "0.9375rem", marginBottom: 4 }}>{formaPagamento || "—"}</div>
+              <div style={{ fontWeight: 600, fontSize: "0.9375rem", marginBottom: 4 }}>{formaPagamento || "â€”"}</div>
               {banco && <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>Banco / Destino: {banco}</div>}
             </div>
           </div>
 
-          {/* Área de assinatura */}
+          {/* Ãrea de assinatura */}
           <div style={{ borderTop: "2px dashed var(--border)", paddingTop: 28, marginTop: 8 }}>
-            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 20 }}>Confirmação e Assinatura</div>
+            <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 20 }}>ConfirmaÃ§Ã£o e Assinatura</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px 48px" }}>
               <div>
                 <div style={{ borderTop: "1.5px solid var(--text-secondary)", paddingTop: 8, marginTop: 52 }}>
@@ -734,8 +734,8 @@ function RelatorioDetalhadoProfModal({
               </div>
               <div>
                 <div style={{ borderTop: "1.5px solid var(--text-secondary)", paddingTop: 8, marginTop: 52 }}>
-                  <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--navy-900)", marginBottom: 3 }}>Assinatura — Ativo Educacional</div>
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Responsável Financeiro</div>
+                  <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--navy-900)", marginBottom: 3 }}>Assinatura â€” Ativo Educacional</div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>ResponsÃ¡vel Financeiro</div>
                 </div>
               </div>
               <div>
@@ -750,7 +750,7 @@ function RelatorioDetalhadoProfModal({
               </div>
             </div>
             <div style={{ marginTop: 24, textAlign: "center", fontSize: "0.68rem", color: "var(--text-faint)" }}>
-              Ativo Educacional — Sistema de Gestão Educacional · Documento gerado em {hoje}
+              Ativo Educacional â€” Sistema de GestÃ£o Educacional Â· Documento gerado em {hoje}
             </div>
           </div>
         </div>
@@ -759,7 +759,7 @@ function RelatorioDetalhadoProfModal({
   );
 }
 
-/* ── Tab: Recebimentos (agrupado por mês) ── */
+/* â”€â”€ Tab: Recebimentos (agrupado por mÃªs) â”€â”€ */
 function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: Lancamento[]; canReversePayments: boolean }) {
   const router = useRouter();
   const [busca, setBusca] = useState("");
@@ -782,8 +782,8 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
       (filtroStatus === "Pago" && statusBadge(status) === "success") ||
       (filtroStatus === "Atrasado" && statusBadge(status) === "danger");
     const matchPeriodo = filtroPeriodo === "Todos" ||
-      (filtroPeriodo === "Este mês" && venc && isMesAtual(venc)) ||
-      (filtroPeriodo === "Mês passado" && venc && isMesPassado(venc));
+      (filtroPeriodo === "Este mÃªs" && venc && isMesAtual(venc)) ||
+      (filtroPeriodo === "MÃªs passado" && venc && isMesPassado(venc));
     return matchBusca && matchStatus && matchPeriodo;
   }), [recebimentos, busca, filtroStatus, filtroPeriodo]);
 
@@ -833,7 +833,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
           <div className="toolbar-left">
             <div className="search-bar">
               <span className="search-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg></span>
-              <input className="search-input" placeholder="Buscar aluno ou descrição..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <input className="search-input" placeholder="Buscar aluno ou descriÃ§Ã£o..." value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
           </div>
           <div className="toolbar-right">
@@ -850,9 +850,9 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
               <option>Atrasado</option>
             </select>
             <select className="filter-select" value={filtroPeriodo} onChange={(e) => setFiltroPeriodo(e.target.value)}>
-              <option value="Todos">Todos os períodos</option>
-              <option>Este mês</option>
-              <option>Mês passado</option>
+              <option value="Todos">Todos os perÃ­odos</option>
+              <option>Este mÃªs</option>
+              <option>MÃªs passado</option>
             </select>
           </div>
         </div>
@@ -860,20 +860,20 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
       </div>
 
       {grupos.length === 0 ? (
-        <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-title">Nenhum lançamento encontrado</div><p className="empty-desc">Ajuste os filtros para ver mais resultados.</p></div></div></div>
+        <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-title">Nenhum lanÃ§amento encontrado</div><p className="empty-desc">Ajuste os filtros para ver mais resultados.</p></div></div></div>
       ) : (
         grupos.map((grupo) => {
           const recebido = grupo.items.filter((r) => statusBadge(String(r.status || r.situacao || "")) === "success").reduce((s, r) => s + valorParcela(r), 0);
           const pendente = grupo.items.filter((r) => statusBadge(String(r.status || r.situacao || "")) !== "success").reduce((s, r) => s + valorParcela(r), 0);
           return (
             <div key={grupo.key} className="card" style={{ marginBottom: 4 }}>
-              {/* Cabeçalho do mês */}
+              {/* CabeÃ§alho do mÃªs */}
               <div style={{ padding: "14px 20px", background: "linear-gradient(90deg, var(--surface-raised), transparent)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ width: 4, height: 32, background: "var(--blue-600)", borderRadius: 4 }} />
                   <div>
                     <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--navy-900)", textTransform: "capitalize" }}>{grupo.label}</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{grupo.items.length} lançamento{grupo.items.length !== 1 ? "s" : ""}</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{grupo.items.length} lanÃ§amento{grupo.items.length !== 1 ? "s" : ""}</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 16 }}>
@@ -890,20 +890,20 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                     </div>
                   )}
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>Total mês</div>
+                    <div style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>Total mÃªs</div>
                     <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>{formatBRL(recebido + pendente)}</div>
                   </div>
                 </div>
               </div>
               <div className="card-body" style={{ paddingTop: 0, paddingBottom: 0 }}>
                 <table className="data-table">
-                  <thead><tr><th>Aluno / Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+                  <thead><tr><th>Aluno / DescriÃ§Ã£o</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>AÃ§Ãµes</th></tr></thead>
                   <tbody>
                     {grupo.items.map((r, i) => {
-                      const nome = String(r.aluno || r.nome || r.descricao || `Lançamento ${i + 1}`);
-                      const venc = String(r.vencimento || r.data_vencimento || "—");
+                      const nome = String(r.aluno || r.nome || r.descricao || `LanÃ§amento ${i + 1}`);
+                      const venc = String(r.vencimento || r.data_vencimento || "â€”");
                       const status = String(r.status || r.situacao || "Pendente");
-                      const atrasado = venc !== "—" && statusBadge(status) !== "success" && parseBRDate(venc) < new Date();
+                      const atrasado = venc !== "â€”" && statusBadge(status) !== "success" && parseBRDate(venc) < new Date();
                       const id = String(r.id || "");
                       const podeExcluir = Boolean(id) && statusBadge(status) !== "success";
                       return (
@@ -936,7 +936,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                               )}
                             </div>
                           </td>
-                          <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "—" ? fmtDate(venc) : "—"}{atrasado && " ⚠"}</span></td>
+                          <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "â€”" ? fmtDate(venc) : "â€”"}{atrasado && " âš "}</span></td>
 	                          <td><span style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{formatBRL(valorParcela(r))}</span></td>
                           <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
                           <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><VerificarPagamentoBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
@@ -954,7 +954,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
       {grupos.length > 1 && (
         <div className="card" style={{ background: "var(--surface-raised)" }}>
           <div className="card-body" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>Total geral — {filtrados.length} lançamentos em {grupos.length} meses</span>
+            <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>Total geral â€” {filtrados.length} lanÃ§amentos em {grupos.length} meses</span>
             <span style={{ fontWeight: 800, fontSize: "1.0625rem" }}>{formatBRL(totalGeral)}</span>
           </div>
         </div>
@@ -963,7 +963,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
   );
 }
 
-/* ── Tab: Despesas ── */
+/* â”€â”€ Tab: Despesas â”€â”€ */
 function DespesasTab({ despesas, canReversePayments }: { despesas: Lancamento[]; canReversePayments: boolean }) {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -1004,7 +1004,7 @@ function DespesasTab({ despesas, canReversePayments }: { despesas: Lancamento[];
           <div>
             <div className="section-eyebrow">Despesas</div>
             <h3 className="section-title">Custos e pagamentos</h3>
-            <p className="section-subtitle">{filtrados.length} de {despesas.length} lançamentos</p>
+            <p className="section-subtitle">{filtrados.length} de {despesas.length} lanÃ§amentos</p>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 2 }}>Total filtrado</div>
@@ -1013,16 +1013,16 @@ function DespesasTab({ despesas, canReversePayments }: { despesas: Lancamento[];
         </div>
         <div className="card-body" style={{ paddingTop: 12 }}>
           {filtrados.length === 0 ? (
-            <div className="empty-state"><div className="empty-title">Nenhuma despesa encontrada</div><p className="empty-desc">Cadastre despesas com "Novo lançamento → Despesa".</p></div>
+            <div className="empty-state"><div className="empty-title">Nenhuma despesa encontrada</div><p className="empty-desc">Cadastre despesas com "Novo lanÃ§amento â†’ Despesa".</p></div>
           ) : (
             <table className="data-table">
-              <thead><tr><th>Fornecedor / Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+              <thead><tr><th>Fornecedor / DescriÃ§Ã£o</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>AÃ§Ãµes</th></tr></thead>
               <tbody>
                 {filtrados.map((d, i) => {
                   const nome = String(d.aluno || d.nome || d.descricao || `Despesa ${i + 1}`);
-                  const venc = String(d.vencimento || d.data_vencimento || "—");
+                  const venc = String(d.vencimento || d.data_vencimento || "â€”");
                   const status = String(d.status || d.situacao || "Pendente");
-                  const atrasado = venc !== "—" && statusBadge(status) !== "success" && parseBRDate(venc) < new Date();
+                  const atrasado = venc !== "â€”" && statusBadge(status) !== "success" && parseBRDate(venc) < new Date();
                   return (
                     <tr key={String(d.id || i)}>
                       <td>
@@ -1031,7 +1031,7 @@ function DespesasTab({ despesas, canReversePayments }: { despesas: Lancamento[];
                           {String(d.descricao || "") && String(d.descricao) !== nome && <span className="table-name-secondary">{String(d.descricao)}</span>}
                         </div>
                       </td>
-                      <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "—" ? fmtDate(venc) : "—"}{atrasado && " ⚠"}</span></td>
+                      <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "â€”" ? fmtDate(venc) : "â€”"}{atrasado && " âš "}</span></td>
                       <td><span style={{ fontWeight: 700, color: "var(--red-700)" }}>{formatBRL(parseValor(d.valor))}</span></td>
                       <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
                       <td><div style={{ display: "flex", gap: 4 }}><BaixaBtn lancamento={d} tipo="despesas" /><EstornoBtn lancamento={d} tipo="despesas" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={d} tipo="despesas" /></div></td>
@@ -1047,7 +1047,7 @@ function DespesasTab({ despesas, canReversePayments }: { despesas: Lancamento[];
   );
 }
 
-/* ── Baixa em massa para um professor ── */
+/* â”€â”€ Baixa em massa para um professor â”€â”€ */
 function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: Lancamento[]; onDone: () => void }) {
   const router = useRouter();
   const pendentes = aulas.filter((a) => statusBadge(String(a.status || "")) !== "success");
@@ -1082,7 +1082,7 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
       setOpen(false);
       onDone();
       router.refresh();
-    } catch { setErro("Erro de conexão. Tente novamente."); }
+    } catch { setErro("Erro de conexÃ£o. Tente novamente."); }
     setSaving(false);
   }
 
@@ -1101,8 +1101,8 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
           <div className="modal-box" style={{ maxWidth: 520 }}>
             <div className="modal-header">
               <div>
-                <div className="modal-title">Baixa em massa — {profNome}</div>
-                <div className="modal-subtitle">{pendentes.length} aulas pendentes · Total: {formatBRL(totalPendente)}</div>
+                <div className="modal-title">Baixa em massa â€” {profNome}</div>
+                <div className="modal-subtitle">{pendentes.length} aulas pendentes Â· Total: {formatBRL(totalPendente)}</div>
               </div>
               <button className="modal-close" onClick={() => setOpen(false)}>
                 <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
@@ -1111,9 +1111,9 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
             <div className="modal-body">
               {/* Resumo */}
               <div style={{ padding: "12px 16px", background: "rgba(5,150,105,0.06)", border: "1.5px solid rgba(5,150,105,0.2)", borderRadius: "var(--radius-md)", marginBottom: 20 }}>
-                <div style={{ fontWeight: 700, color: "var(--green-700)", marginBottom: 6 }}>Confirmação de pagamento</div>
+                <div style={{ fontWeight: 700, color: "var(--green-700)", marginBottom: 6 }}>ConfirmaÃ§Ã£o de pagamento</div>
                 <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                  Todas as <strong>{pendentes.length} aulas pendentes</strong> de <strong>{profNome}</strong> serão marcadas como <strong>Pagas</strong>.
+                  Todas as <strong>{pendentes.length} aulas pendentes</strong> de <strong>{profNome}</strong> serÃ£o marcadas como <strong>Pagas</strong>.
                   <br />Valor total: <strong style={{ color: "var(--green-700)" }}>{formatBRL(totalPendente)}</strong>
                 </div>
               </div>
@@ -1134,7 +1134,7 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
                   <input className="form-input" placeholder="Ex: Nubank, Conta 001" value={form.banco_destino} onChange={(e) => setForm((p) => ({ ...p, banco_destino: e.target.value }))} />
                 </div>
                 <div className="form-group form-group-span2">
-                  <label className="form-label">Observação</label>
+                  <label className="form-label">ObservaÃ§Ã£o</label>
                   <textarea className="form-input form-textarea" rows={2} placeholder="Opcional" value={form.observacao_baixa} onChange={(e) => setForm((p) => ({ ...p, observacao_baixa: e.target.value }))} />
                 </div>
               </div>
@@ -1143,7 +1143,7 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setOpen(false)} disabled={saving}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmar} disabled={saving} style={{ background: "var(--green-700)", borderColor: "var(--green-700)" }}>
-                {saving ? "Processando..." : `Confirmar pagamento — ${formatBRL(totalPendente)}`}
+                {saving ? "Processando..." : `Confirmar pagamento â€” ${formatBRL(totalPendente)}`}
               </button>
             </div>
           </div>
@@ -1153,7 +1153,7 @@ function BaixaMassaBtn({ profNome, aulas, onDone }: { profNome: string; aulas: L
   );
 }
 
-/* ── Tab: Pagamento Professores (por nome do professor) ── */
+/* â”€â”€ Tab: Pagamento Professores (por nome do professor) â”€â”€ */
 function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lancamento[]; canReversePayments: boolean }) {
   const [professor, setProfessor] = useState("todos");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
@@ -1191,7 +1191,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
           <div className="metric-icon metric-icon-gold"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg></div>
           <div className="metric-label">Professores</div>
           <div className="metric-value">{porProfessor.length}</div>
-          <div className="metric-note">{filtradas.length} lançamentos</div>
+          <div className="metric-note">{filtradas.length} lanÃ§amentos</div>
         </div>
         <div className="metric-card metric-card-green">
           <div className="metric-icon metric-icon-green"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg></div>
@@ -1212,7 +1212,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
           <div>
             <div className="section-eyebrow">Professores</div>
             <h3 className="section-title">Pagamento de professores</h3>
-            <p className="section-subtitle">{porProfessor.length} professor(es) · {filtradas.length} lançamentos</p>
+            <p className="section-subtitle">{porProfessor.length} professor(es) Â· {filtradas.length} lanÃ§amentos</p>
           </div>
           <div className="toolbar" style={{ flexWrap: "wrap" }}>
             <select className="form-input" value={professor} onChange={(e) => setProfessor(e.target.value)} style={{ minWidth: 220 }}>
@@ -1229,7 +1229,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
                 className="btn btn-primary btn-sm"
                 onClick={() => { setRelatorioProf(professor); setRelatorioAberto(true); }}
               >
-                Relatório Detalhado
+                RelatÃ³rio Detalhado
               </button>
             )}
           </div>
@@ -1249,7 +1249,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
 
               return (
                 <div key={profNome} style={{ marginBottom: 28 }}>
-                  {/* Cabeçalho do professor */}
+                  {/* CabeÃ§alho do professor */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--surface-raised)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", marginBottom: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, var(--blue-600), var(--navy-900))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "1rem" }}>
@@ -1257,7 +1257,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
                       </div>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--navy-900)" }}>{profNome}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{aulas.length} aula{aulas.length !== 1 ? "s" : ""} · Pago: {formatBRL(pagoProf)} · Em aberto: {formatBRL(totalProf - pagoProf)}</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{aulas.length} aula{aulas.length !== 1 ? "s" : ""} Â· Pago: {formatBRL(pagoProf)} Â· Em aberto: {formatBRL(totalProf - pagoProf)}</div>
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1265,12 +1265,12 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => { setRelatorioProf(profNome); setRelatorioAberto(true); }}
-                        title="Ver relatório detalhado com assinatura"
+                        title="Ver relatÃ³rio detalhado com assinatura"
                       >
-                        Relatório
+                        RelatÃ³rio
                       </button>
                       <BaixaMassaBtn profNome={profNome} aulas={aulas} onDone={() => { /* router.refresh() called inside */ }} />
-                      {telefone && <AutoWhatsAppButton phone={telefone} message={`Olá ${profNome}! Segue resumo do seu pagamento:\nAulas: ${aulas.length}\nTotal: ${formatBRL(totalProf)}\nPago: ${formatBRL(pagoProf)}\nEm aberto: ${formatBRL(totalProf - pagoProf)}`} />}
+                      {telefone && <AutoWhatsAppButton phone={telefone} message={`OlÃ¡ ${profNome}! Segue resumo do seu pagamento:\nAulas: ${aulas.length}\nTotal: ${formatBRL(totalProf)}\nPago: ${formatBRL(pagoProf)}\nEm aberto: ${formatBRL(totalProf - pagoProf)}`} />}
                     </div>
                   </div>
 
@@ -1280,25 +1280,25 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
                       <tr>
                         <th>Data da Aula</th>
                         <th>Turma</th>
-                        <th>Horário</th>
-                        <th>Lição / Módulo</th>
-                        <th>Duração</th>
+                        <th>HorÃ¡rio</th>
+                        <th>LiÃ§Ã£o / MÃ³dulo</th>
+                        <th>DuraÃ§Ã£o</th>
                         <th>Valor</th>
                         <th>Status</th>
-                        <th>Ações</th>
+                        <th>AÃ§Ãµes</th>
                       </tr>
                     </thead>
                     <tbody>
                       {[...aulas].sort((a, b) => String(a.data_aula || a.vencimento || "").localeCompare(String(b.data_aula || b.vencimento || ""))).map((d, i) => {
-                        const dataAula = String(d.data_aula || d.vencimento || d.data_vencimento || "—");
-                        const licao = [d.licao_inicio, d.licao_fim ? `a ${d.licao_fim}` : ""].filter(Boolean).join(" ") || String(d.modulo || d.descricao || "—");
-                        const dur = d.duracao_minutos ? `${d.duracao_minutos} min` : "—";
+                        const dataAula = String(d.data_aula || d.vencimento || d.data_vencimento || "â€”");
+                        const licao = [d.licao_inicio, d.licao_fim ? `a ${d.licao_fim}` : ""].filter(Boolean).join(" ") || String(d.modulo || d.descricao || "â€”");
+                        const dur = d.duracao_minutos ? `${d.duracao_minutos} min` : "â€”";
                         const status = String(d.status || d.situacao || "Pendente");
                         return (
                           <tr key={String(d.id || i)}>
-                            <td style={{ fontWeight: 600 }}>{dataAula !== "—" ? fmtDate(dataAula) : "—"}</td>
-                            <td>{String(d.turma || "—")}</td>
-                            <td>{String(d.horario || "—")}</td>
+                            <td style={{ fontWeight: 600 }}>{dataAula !== "â€”" ? fmtDate(dataAula) : "â€”"}</td>
+                            <td>{String(d.turma || "â€”")}</td>
+                            <td>{String(d.horario || "â€”")}</td>
                             <td style={{ color: "var(--text-secondary)" }}>{licao}</td>
                             <td style={{ color: "var(--text-secondary)" }}>{dur}</td>
                             <td><span style={{ fontWeight: 700 }}>{formatBRL(parseValor(d.valor))}</span></td>
@@ -1321,7 +1321,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
                         <td style={{ padding: "8px 12px", fontWeight: 800, fontSize: "0.9rem", color: totalProf - pagoProf > 0 ? "var(--gold-700)" : "var(--green-700)" }}>{formatBRL(totalProf)}</td>
                         <td colSpan={2} style={{ padding: "8px 12px", fontSize: "0.78rem", color: "var(--text-muted)" }}>
                           {pagoProf > 0 && `Pago: ${formatBRL(pagoProf)}`}
-                          {totalProf - pagoProf > 0 && ` · Pendente: ${formatBRL(totalProf - pagoProf)}`}
+                          {totalProf - pagoProf > 0 && ` Â· Pendente: ${formatBRL(totalProf - pagoProf)}`}
                         </td>
                       </tr>
                     </tfoot>
@@ -1344,7 +1344,7 @@ function ProfessoresAulasTab({ despesas, canReversePayments }: { despesas: Lanca
   );
 }
 
-/* ── Tab: Inadimplência (agrupada por mês) ── */
+/* â”€â”€ Tab: InadimplÃªncia (agrupada por mÃªs) â”€â”€ */
 function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
   const [busca, setBusca] = useState("");
 
@@ -1373,7 +1373,7 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
       <div className="metric-grid metric-grid-3">
         <div className="metric-card metric-card-red"><div className="metric-label">Total em atraso</div><div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(total)}</div><div className="metric-note">{atrasados.length} boletos vencidos</div></div>
         <div className="metric-card metric-card-gold"><div className="metric-label">2+ mensalidades</div><div className="metric-value">{doisOuMais}</div><div className="metric-note">Risco de cancelamento</div></div>
-        <div className="metric-card metric-card-red"><div className="metric-label">+60 dias</div><div className="metric-value">{atrasados.filter((r) => r.dias >= 60).length}</div><div className="metric-note">Exige ação da direção</div></div>
+        <div className="metric-card metric-card-red"><div className="metric-label">+60 dias</div><div className="metric-value">{atrasados.filter((r) => r.dias >= 60).length}</div><div className="metric-note">Exige aÃ§Ã£o da direÃ§Ã£o</div></div>
       </div>
 
       <div className="card">
@@ -1381,20 +1381,20 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
           <div className="toolbar-left">
             <div className="search-bar">
               <span className="search-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg></span>
-              <input className="search-input" placeholder="Buscar inadimplente, turma ou responsável..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <input className="search-input" placeholder="Buscar inadimplente, turma ou responsÃ¡vel..." value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
           </div>
         </div>
       </div>
 
       {grupos.length === 0 ? (
-        <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-title">Sem inadimplência no filtro</div><p className="empty-desc">Quando houver boleto vencido, aparecerá aqui agrupado por mês de vencimento.</p></div></div></div>
+        <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-title">Sem inadimplÃªncia no filtro</div><p className="empty-desc">Quando houver boleto vencido, aparecerÃ¡ aqui agrupado por mÃªs de vencimento.</p></div></div></div>
       ) : (
         grupos.map((grupo) => {
           const totalGrupo = grupo.items.reduce((s, r) => s + valorParcela(r), 0);
           return (
             <div key={grupo.key} className="card" style={{ marginBottom: 4 }}>
-              {/* Cabeçalho do mês */}
+              {/* CabeÃ§alho do mÃªs */}
               <div style={{ padding: "12px 20px", background: "linear-gradient(90deg, rgba(220,38,38,0.06), transparent)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 4, height: 28, background: "var(--red-600)", borderRadius: 4 }} />
@@ -1402,7 +1402,7 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
                     <div style={{ fontWeight: 800, fontSize: "0.9375rem", color: "var(--red-700)", textTransform: "capitalize" }}>
                       Vencimento: {grupo.label}
                     </div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 1 }}>{grupo.items.length} lançamento{grupo.items.length !== 1 ? "s" : ""} em atraso</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 1 }}>{grupo.items.length} lanÃ§amento{grupo.items.length !== 1 ? "s" : ""} em atraso</div>
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -1412,18 +1412,18 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
               </div>
               <div className="card-body" style={{ paddingTop: 0, paddingBottom: 0 }}>
                 <table className="data-table">
-                  <thead><tr><th>Aluno</th><th>Turma</th><th>Valor</th><th>Atraso</th><th>Responsável</th><th>Ações</th></tr></thead>
+                  <thead><tr><th>Aluno</th><th>Turma</th><th>Valor</th><th>Atraso</th><th>ResponsÃ¡vel</th><th>AÃ§Ãµes</th></tr></thead>
                   <tbody>
                     {grupo.items.map((r, i) => {
                       const aluno = String(r.aluno || r.nome || `Aluno ${i + 1}`);
-                      const msg = `Olá! Identificamos pendência financeira de ${aluno}: ${String(r.descricao || "mensalidade")} no valor de ${formatBRL(valorParcela(r))}, vencida há ${r.dias} dia(s). Podemos ajudar com o pagamento ou negociação?`;
+                      const msg = `OlÃ¡! Identificamos pendÃªncia financeira de ${aluno}: ${String(r.descricao || "mensalidade")} no valor de ${formatBRL(valorParcela(r))}, vencida hÃ¡ ${r.dias} dia(s). Podemos ajudar com o pagamento ou negociaÃ§Ã£o?`;
                       return (
                         <tr key={String(r.id || i)}>
                           <td><div className="table-name-cell"><span className="table-name-primary">{aluno}</span><span className="table-name-secondary">{String(r.descricao || "")}</span></div></td>
-                          <td>{String(extra(r, "turma") || "—")}</td>
+                          <td>{String(extra(r, "turma") || "â€”")}</td>
                           <td style={{ fontWeight: 800, color: "var(--red-700)" }}>{formatBRL(valorParcela(r))}</td>
                           <td><span className={`badge badge-${faixa(r.dias as number)}`}><span className="badge-dot" />{r.dias as number} dias</span></td>
-                          <td>{String(extra(r, "responsavel") || "—")}</td>
+                          <td>{String(extra(r, "responsavel") || "â€”")}</td>
                           <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><AutoWhatsAppButton phone={extra(r, "telefone") || extra(r, "whatsapp")} message={msg} /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><BaixaBtn lancamento={r} tipo="recebimentos" /></div></td>
                         </tr>
                       );
@@ -1439,8 +1439,13 @@ function InadimplenciaTab({ recebimentos }: { recebimentos: Lancamento[] }) {
   );
 }
 
-/* ── Tab: Relatório mensal ── */
+/* â”€â”€ Tab: RelatÃ³rio mensal â”€â”€ */
 function RelatorioTab({ recebimentos, despesas }: { recebimentos: Lancamento[]; despesas: Lancamento[] }) {
+  const [mesSelecionado, setMesSelecionado] = useState("todos");
+  const [tituloRelatorio, setTituloRelatorio] = useState("Relatório de recebimentos dos alunos");
+  const [subtituloRelatorio, setSubtituloRelatorio] = useState("Resumo financeiro dos recebimentos lançados no Active Educacional.");
+  const [observacoesRelatorio, setObservacoesRelatorio] = useState("");
+
   const meses = useMemo(() => {
     const map = new Map<string, { chave: string; mes: string; recebido: number; aReceber: number; totalDespesas: number }>();
 
@@ -1450,8 +1455,10 @@ function RelatorioTab({ recebimentos, despesas }: { recebimentos: Lancamento[]; 
     }
 
     for (const r of recebimentos) {
-      const v = r.vencimento || r.data_vencimento; if (!v) continue;
-      const d = parseBRDate(String(v)); if (isNaN(d.getTime())) continue;
+      const v = r.vencimento || r.data_vencimento;
+      if (!v) continue;
+      const d = parseBRDate(String(v));
+      if (isNaN(d.getTime())) continue;
       const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const entry = addEntry(chave, d);
       const s = String(r.status || r.situacao || "").toLowerCase();
@@ -1460,8 +1467,10 @@ function RelatorioTab({ recebimentos, despesas }: { recebimentos: Lancamento[]; 
     }
 
     for (const d of despesas) {
-      const v = d.vencimento || d.data_vencimento; if (!v) continue;
-      const dt = parseBRDate(String(v)); if (isNaN(dt.getTime())) continue;
+      const v = d.vencimento || d.data_vencimento;
+      if (!v) continue;
+      const dt = parseBRDate(String(v));
+      if (isNaN(dt.getTime())) continue;
       const chave = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
       addEntry(chave, dt).totalDespesas += parseValor(d.valor);
     }
@@ -1469,7 +1478,47 @@ function RelatorioTab({ recebimentos, despesas }: { recebimentos: Lancamento[]; 
     return Array.from(map.values()).sort((a, b) => b.chave.localeCompare(a.chave));
   }, [recebimentos, despesas]);
 
-  const totais = meses.reduce((a, m) => ({ rec: a.rec + m.recebido, ar: a.ar + m.aReceber, dep: a.dep + m.totalDespesas }), { rec: 0, ar: 0, dep: 0 });
+  const opcoesMes = useMemo(() => meses.map((item) => ({ chave: item.chave, label: item.mes })), [meses]);
+
+  const recebimentosFiltrados = useMemo(() => {
+    if (mesSelecionado === "todos") return recebimentos;
+    return recebimentos.filter((r) => {
+      const venc = String(r.vencimento || r.data_vencimento || "");
+      return venc ? mesKey(venc) === mesSelecionado : false;
+    });
+  }, [recebimentos, mesSelecionado]);
+
+  const despesasFiltradas = useMemo(() => {
+    if (mesSelecionado === "todos") return despesas;
+    return despesas.filter((d) => {
+      const venc = String(d.vencimento || d.data_vencimento || "");
+      return venc ? mesKey(venc) === mesSelecionado : false;
+    });
+  }, [despesas, mesSelecionado]);
+
+  const resumoFiltrado = useMemo(() => {
+    if (mesSelecionado === "todos") return meses;
+    return meses.filter((m) => m.chave === mesSelecionado);
+  }, [meses, mesSelecionado]);
+
+  const totais = useMemo(() => {
+    const rec = recebimentosFiltrados
+      .filter((r) => statusBadge(String(r.status || r.situacao || "")) === "success")
+      .reduce((sum, r) => sum + valorParcela(r), 0);
+    const ar = recebimentosFiltrados
+      .filter((r) => statusBadge(String(r.status || r.situacao || "")) !== "success")
+      .reduce((sum, r) => sum + valorParcela(r), 0);
+    const dep = despesasFiltradas.reduce((sum, d) => sum + parseValor(d.valor), 0);
+    return { rec, ar, dep };
+  }, [recebimentosFiltrados, despesasFiltradas]);
+
+  const recebimentosDetalhados = useMemo(() => {
+    return [...recebimentosFiltrados].sort((a, b) => sortDateValue(a.vencimento || a.data_vencimento) - sortDateValue(b.vencimento || b.data_vencimento));
+  }, [recebimentosFiltrados]);
+
+  const mesLabelAtual = mesSelecionado === "todos"
+    ? "Todos os meses"
+    : opcoesMes.find((item) => item.chave === mesSelecionado)?.label || mesSelecionado;
 
   return (
     <div id="relatorio-financeiro-print">
@@ -1478,68 +1527,131 @@ function RelatorioTab({ recebimentos, despesas }: { recebimentos: Lancamento[]; 
           <div className="metric-icon metric-icon-green"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg></div>
           <div className="metric-label">Total recebido</div>
           <div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(totais.rec)}</div>
-          <div className="metric-note">Todos os períodos</div>
+          <div className="metric-note">{mesLabelAtual}</div>
         </div>
         <div className="metric-card metric-card-gold">
           <div className="metric-icon metric-icon-gold"><svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" /></svg></div>
           <div className="metric-label">A receber</div>
           <div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(totais.ar)}</div>
-          <div className="metric-note">Em aberto (todos os períodos)</div>
+          <div className="metric-note">Em aberto em {mesLabelAtual}</div>
         </div>
         <div className="metric-card metric-card-red">
           <div className="metric-icon metric-icon-red"><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg></div>
           <div className="metric-label">Total despesas</div>
           <div className="metric-value" style={{ fontSize: "1.5rem" }}>{formatBRL(totais.dep)}</div>
-          <div className="metric-note">Todos os períodos</div>
+          <div className="metric-note">{mesLabelAtual}</div>
         </div>
       </div>
       <div className="card">
         <div className="card-header">
           <div>
             <div className="section-eyebrow">Relatório</div>
-            <h3 className="section-title">Resumo mensal</h3>
-            <p className="section-subtitle">{meses.length} meses com movimentação</p>
+            <h3 className="section-title">{tituloRelatorio}</h3>
+            <p className="section-subtitle">{subtituloRelatorio}</p>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => printWindow("relatorio-financeiro-print", "Relatório Financeiro — Ativo Educacional")}>Imprimir / PDF</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => printWindow("relatorio-financeiro-print", "Relatório Financeiro - Ativo Educacional")}>Imprimir / PDF</button>
         </div>
         <div className="card-body" style={{ paddingTop: 12 }}>
-          {meses.length === 0 ? (
+          <div className="form-grid" style={{ marginBottom: 18 }}>
+            <div className="form-group">
+              <label className="form-label">Mês do relatório</label>
+              <select className="form-input" value={mesSelecionado} onChange={(e) => setMesSelecionado(e.target.value)}>
+                <option value="todos">Todos os meses</option>
+                {opcoesMes.map((mes) => (
+                  <option key={mes.chave} value={mes.chave}>{mes.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Título do relatório</label>
+              <input className="form-input" value={tituloRelatorio} onChange={(e) => setTituloRelatorio(e.target.value)} />
+            </div>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Subtítulo / descrição</label>
+              <input className="form-input" value={subtituloRelatorio} onChange={(e) => setSubtituloRelatorio(e.target.value)} />
+            </div>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Observações</label>
+              <textarea className="form-input" rows={3} value={observacoesRelatorio} onChange={(e) => setObservacoesRelatorio(e.target.value)} placeholder="Observações para aparecer no relatório impresso." />
+            </div>
+          </div>
+
+          {observacoesRelatorio && (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <div className="card-body" style={{ padding: "14px 16px" }}>
+                <div className="section-eyebrow">Observações</div>
+                <div style={{ marginTop: 6, whiteSpace: "pre-wrap", color: "var(--text-secondary)" }}>{observacoesRelatorio}</div>
+              </div>
+            </div>
+          )}
+
+          {resumoFiltrado.length === 0 ? (
             <div className="empty-state"><div className="empty-title">Sem dados para relatório</div><p className="empty-desc">Não há lançamentos com datas cadastradas.</p></div>
           ) : (
-            <table className="data-table">
-              <thead><tr><th>Mês</th><th>Recebido</th><th>A receber</th><th>Despesas</th><th>Saldo</th></tr></thead>
-              <tbody>
-                {meses.map((m) => {
-                  const saldo = m.recebido - m.totalDespesas;
-                  return (
-                    <tr key={m.chave}>
-                      <td style={{ textTransform: "capitalize", fontWeight: 600 }}>{m.mes}</td>
-                      <td style={{ color: "var(--green-700)", fontWeight: 700 }}>{formatBRL(m.recebido)}</td>
-                      <td style={{ color: "var(--gold-700)" }}>{formatBRL(m.aReceber)}</td>
-                      <td style={{ color: "var(--red-700)" }}>{formatBRL(m.totalDespesas)}</td>
-                      <td><span style={{ fontWeight: 700, color: saldo >= 0 ? "var(--green-700)" : "var(--red-700)" }}>{formatBRL(saldo)}</span></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td style={{ fontWeight: 700 }}>Total geral</td>
-                  <td style={{ color: "var(--green-700)", fontWeight: 800 }}>{formatBRL(totais.rec)}</td>
-                  <td style={{ color: "var(--gold-700)", fontWeight: 800 }}>{formatBRL(totais.ar)}</td>
-                  <td style={{ color: "var(--red-700)", fontWeight: 800 }}>{formatBRL(totais.dep)}</td>
-                  <td><span style={{ fontWeight: 800, color: (totais.rec - totais.dep) >= 0 ? "var(--green-700)" : "var(--red-700)" }}>{formatBRL(totais.rec - totais.dep)}</span></td>
-                </tr>
-              </tfoot>
-            </table>
+            <>
+              <table className="data-table" style={{ marginBottom: 18 }}>
+                <thead><tr><th>Mês</th><th>Recebido</th><th>A receber</th><th>Despesas</th><th>Saldo</th></tr></thead>
+                <tbody>
+                  {resumoFiltrado.map((m) => {
+                    const saldo = m.recebido - m.totalDespesas;
+                    return (
+                      <tr key={m.chave}>
+                        <td style={{ textTransform: "capitalize", fontWeight: 600 }}>{m.mes}</td>
+                        <td style={{ color: "var(--green-700)", fontWeight: 700 }}>{formatBRL(m.recebido)}</td>
+                        <td style={{ color: "var(--gold-700)" }}>{formatBRL(m.aReceber)}</td>
+                        <td style={{ color: "var(--red-700)" }}>{formatBRL(m.totalDespesas)}</td>
+                        <td><span style={{ fontWeight: 700, color: saldo >= 0 ? "var(--green-700)" : "var(--red-700)" }}>{formatBRL(saldo)}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td style={{ fontWeight: 700 }}>{mesSelecionado === "todos" ? "Total geral" : "Total do mês"}</td>
+                    <td style={{ color: "var(--green-700)", fontWeight: 800 }}>{formatBRL(totais.rec)}</td>
+                    <td style={{ color: "var(--gold-700)", fontWeight: 800 }}>{formatBRL(totais.ar)}</td>
+                    <td style={{ color: "var(--red-700)", fontWeight: 800 }}>{formatBRL(totais.dep)}</td>
+                    <td><span style={{ fontWeight: 800, color: (totais.rec - totais.dep) >= 0 ? "var(--green-700)" : "var(--red-700)" }}>{formatBRL(totais.rec - totais.dep)}</span></td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div style={{ marginBottom: 10 }}>
+                <div className="section-eyebrow">Recebimentos</div>
+                <h3 className="section-title" style={{ fontSize: "1rem" }}>Detalhamento dos alunos</h3>
+                <p className="section-subtitle">{recebimentosDetalhados.length} lançamento(s) em {mesLabelAtual.toLowerCase()}</p>
+              </div>
+
+              {recebimentosDetalhados.length === 0 ? (
+                <div className="empty-state"><div className="empty-title">Sem recebimentos no período</div><p className="empty-desc">Selecione outro mês para gerar o relatório detalhado.</p></div>
+              ) : (
+                <table className="data-table">
+                  <thead><tr><th>Aluno</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Pagamento</th></tr></thead>
+                  <tbody>
+                    {recebimentosDetalhados.map((r, index) => {
+                      const status = String(r.status || r.situacao || "Pendente");
+                      return (
+                        <tr key={String(r.id || index)}>
+                          <td style={{ fontWeight: 600 }}>{String(r.aluno || r.nome || "Aluno")}</td>
+                          <td>{String(r.descricao || r.categoria || "Mensalidade")}</td>
+                          <td>{fmtDate(String(r.vencimento || r.data_vencimento || "")) || "-"}</td>
+                          <td style={{ fontWeight: 700 }}>{formatBRL(valorParcela(r))}</td>
+                          <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
+                          <td>{String(r.forma_pagamento || r.mercado_pago_payment_method || r.banco_destino || "-")}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
   );
 }
-
-/* ── Export principal ── */
+/* â”€â”€ Export principal â”€â”€ */
 export function FinanceiroTable({
   recebimentos,
   despesas,
@@ -1561,12 +1673,12 @@ export function FinanceiroTable({
   const visibleTabs: { id: Tab; label: string }[] = [
     { id: "recebimentos", label: "Recebimentos" },
     { id: "despesas", label: "Despesas" },
-    { id: "inadimplencia", label: "Inadimplência" },
+    { id: "inadimplencia", label: "InadimplÃªncia" },
     ...(canSeeProfessorReports ? [
       { id: "professores" as Tab, label: "Professores" },
       { id: "fornecedores" as Tab, label: "Fornecedores" },
       { id: "fechamentos" as Tab, label: "Fechamentos" },
-      { id: "relatorio" as Tab, label: "Relatório" },
+      { id: "relatorio" as Tab, label: "RelatÃ³rio" },
     ] : []),
   ];
 
@@ -1600,3 +1712,4 @@ export function FinanceiroTable({
     </>
   );
 }
+
