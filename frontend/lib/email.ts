@@ -9,6 +9,11 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
+function isValidEmail(value: unknown) {
+  const email = text(value).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function env(...names: string[]) {
   for (const name of names) {
     const value = text(process.env[name]);
@@ -30,20 +35,29 @@ async function configValue(...names: string[]) {
 }
 
 async function smtpConfig() {
+  const contactEmail = await configValue("email_contato");
   const host = await configValue("ACTIVE_SMTP_HOST", "SMTP_HOST", "host", "smtp_host");
   const port = Number(await configValue("ACTIVE_SMTP_PORT", "SMTP_PORT", "port", "smtp_port") || 587);
-  const user = await configValue("ACTIVE_SMTP_USER", "SMTP_USER", "user", "smtp_user");
+  const rawUser = await configValue("ACTIVE_SMTP_USER", "SMTP_USER", "user", "smtp_user");
   const password = await configValue("ACTIVE_SMTP_PASS", "SMTP_PASS", "senha", "password", "pass", "smtp_pass");
-  const fromEmail = await configValue("ACTIVE_EMAIL_FROM", "SMTP_FROM", "from_email", "from", "smtp_from", "user");
+  const rawFromEmail = await configValue("ACTIVE_EMAIL_FROM", "SMTP_FROM", "from_email", "from", "smtp_from", "user", "email_contato");
   const fromName = await configValue("ACTIVE_EMAIL_FROM_NAME", "SMTP_FROM_NAME", "from_name");
   const enabled = (await configValue("enabled", "smtp_enabled")).toLowerCase();
   const tlsFlag = (await configValue("ACTIVE_SMTP_TLS", "SMTP_TLS", "tls", "smtp_tls") || "1").toLowerCase();
+  const user = isValidEmail(rawUser) ? rawUser : "";
+  const fromEmail = isValidEmail(rawFromEmail)
+    ? rawFromEmail
+    : isValidEmail(rawUser)
+      ? rawUser
+      : isValidEmail(contactEmail)
+        ? contactEmail
+        : "";
   return {
     host,
     port,
     user,
     password,
-    fromEmail: fromEmail || user,
+    fromEmail,
     fromName: fromName || "Active Educacional",
     enabled: enabled !== "false" && enabled !== "0" && enabled !== "inativo",
     useTls: tlsFlag !== "0" && tlsFlag !== "false" && tlsFlag !== "no",
@@ -121,7 +135,10 @@ function upgradeTls(socket: net.Socket, host: string) {
 async function smtpSend(to: string, subject: string, body: string) {
   const cfg = await smtpConfig();
   if (!cfg.enabled) return { ok: false, status: "smtp desativado" };
-  if (!cfg.host || !cfg.port || !cfg.fromEmail) return { ok: false, status: "smtp nao configurado" };
+  if (!cfg.host || !cfg.port) return { ok: false, status: "smtp nao configurado" };
+  if (!cfg.user || !cfg.password) return { ok: false, status: "smtp login incompleto" };
+  if (!isValidEmail(cfg.user)) return { ok: false, status: "smtp usuario invalido" };
+  if (!isValidEmail(cfg.fromEmail)) return { ok: false, status: "smtp remetente invalido" };
 
   let socket: net.Socket = cfg.port === 465
     ? await connectTls(cfg.host, cfg.port)
@@ -166,6 +183,7 @@ export async function sendEmail(to: unknown, subject: string, body: string, sess
   const assunto = text(subject || "Active Educacional");
   const mensagem = text(body);
   if (!email || !mensagem) return { ok: false, status: "email ou mensagem vazio" };
+  if (!isValidEmail(email)) return { ok: false, status: "email destino invalido" };
 
   try {
     const result = await smtpSend(email, assunto, mensagem);
@@ -200,4 +218,15 @@ export async function logEmail(destinatario: string, assunto: string, mensagem: 
 
 export function isEmailConfiguredFromEnv() {
   return Boolean(env("ACTIVE_SMTP_HOST", "SMTP_HOST") && env("ACTIVE_EMAIL_FROM", "SMTP_FROM", "ACTIVE_SMTP_USER", "SMTP_USER"));
+}
+
+export function isEmailConfigurationValid(config: Record<string, unknown> | null | undefined, sistema?: Record<string, unknown> | null | undefined) {
+  if (!config) return false;
+  const host = text(config.host || config.smtp_host);
+  const user = text(config.user || config.smtp_user);
+  const fromEmail = text(config.from_email || config.from || config.smtp_from || sistema?.email_contato);
+  const password = text(config.senha || config.password || config.pass || config.smtp_pass);
+  const enabled = text(config.enabled ?? "true").toLowerCase();
+  if (enabled === "false" || enabled === "0" || enabled === "inativo") return false;
+  return Boolean(host && password && isValidEmail(user) && isValidEmail(fromEmail));
 }

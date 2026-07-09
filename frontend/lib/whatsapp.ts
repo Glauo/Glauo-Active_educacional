@@ -13,6 +13,14 @@ function normalizePhone(value: unknown) {
   return digits;
 }
 
+function successPreview(preview: string) {
+  return /sent|success|sucesso|enviado|queued|accepted|created|message sent|mensagem enviada/i.test(preview);
+}
+
+function failurePreview(preview: string) {
+  return /error|erro|invalid|unauthorized|forbidden|not found|failed|fail|expired|disconnect/i.test(preview);
+}
+
 function env(...names: string[]) {
   for (const name of names) {
     const value = text(process.env[name]);
@@ -56,14 +64,33 @@ function endpointCandidates(baseUrl: string, instance: string) {
     "/v1/message/send-text",
     `/v1/message/send-text?instanceId=${inst}`,
     `/v1/message/send-text?instance_id=${inst}`,
+    `/v1/message/send-text/${inst}`,
     "/v1/messages/send-text",
     `/v1/messages/send-text?instanceId=${inst}`,
+    `/v1/messages/send-text/${inst}`,
     "/api/v1/message/send-text",
     `/api/v1/message/send-text?instanceId=${inst}`,
+    `/api/v1/message/send-text/${inst}`,
     "/message/send-text",
     `/message/send-text?instanceId=${inst}`,
     "/message/sendText",
     `/message/sendText?instanceId=${inst}`,
+    "/message/send-message",
+    `/message/send-message?instanceId=${inst}`,
+    "/message/send",
+    `/message/send?instanceId=${inst}`,
+    "/send-text",
+    `/send-text?instanceId=${inst}`,
+    "/send-message",
+    `/send-message?instanceId=${inst}`,
+    "/api/send-text",
+    `/api/send-text?instanceId=${inst}`,
+    "/api/send-message",
+    `/api/send-message?instanceId=${inst}`,
+    `/instance/${inst}/send-text`,
+    `/instance/${inst}/send-message`,
+    `/instances/${inst}/send-text`,
+    `/instances/${inst}/send-message`,
   ];
   return roots.flatMap((root) => paths.map((path) => `${root}${path}`));
 }
@@ -82,18 +109,39 @@ export async function sendWhatsApp(number: unknown, message: string, session?: P
     { apikey: token },
     { "x-api-key": token },
     { token },
+    { Authorization: token.toLowerCase().startsWith("bearer ") ? token : `Bearer ${token}`, instanceId: instance },
+    { Authorization: token.toLowerCase().startsWith("bearer ") ? token : `Bearer ${token}`, instance_id: instance },
+    { apikey: token, instanceId: instance },
+    { apikey: token, instance_id: instance },
   ];
   const payloads = [
     { phone, message: body },
     { phone, text: body },
+    { phone, body },
     { number: phone, message: body },
     { number: phone, text: body },
+    { number: phone, body },
     { to: phone, message: body },
     { to: phone, text: body },
+    { to: phone, body },
+    { recipient: phone, message: body },
+    { recipient: phone, text: body },
+    { recipient: phone, body },
+    { chatId: `${phone}@c.us`, message: body },
+    { chatId: `${phone}@c.us`, text: body },
+    { chatId: `${phone}@c.us`, body },
+    { jid: `${phone}@c.us`, message: body },
+    { jid: `${phone}@c.us`, text: body },
     { instanceId: instance, phone, message: body },
     { instanceId: instance, phone, text: body },
+    { instanceId: instance, number: phone, message: body },
+    { instanceId: instance, number: phone, text: body },
     { instance_id: instance, phone, message: body },
     { instance_id: instance, phone, text: body },
+    { instance: instance, phone, message: body },
+    { instance: instance, number: phone, text: body },
+    { session: instance, phone, message: body },
+    { session: instance, number: phone, text: body },
   ];
   const attempts: Record<string, unknown>[] = [];
   const maxAttempts = 24;
@@ -111,7 +159,7 @@ export async function sendWhatsApp(number: unknown, message: string, session?: P
           });
           const preview = await res.text().catch(() => "");
           attempts.push({ url, status: res.status, auth: Object.keys(authHeaders)[0], payload: Object.keys(payload), preview: preview.slice(0, 160) });
-          if ((res.ok && !/error|erro|invalid|unauthorized|forbidden|not found/i.test(preview)) || /sent|success|sucesso|enviado|queued|accepted/i.test(preview)) {
+          if ((res.ok && !failurePreview(preview)) || successPreview(preview)) {
             await logWhatsApp(phone, body, "enviado", session);
             return { ok: true, status: `enviado HTTP ${res.status}`, attempts };
           }
@@ -126,6 +174,13 @@ export async function sendWhatsApp(number: unknown, message: string, session?: P
 
   const last = attempts[attempts.length - 1];
   const status = attempts.length >= maxAttempts ? "falha wapi limite de tentativas" : `falha wapi ${text(last?.status || last?.error || "sem resposta")}`;
+  console.error("[sendWhatsApp]", {
+    phone,
+    baseUrl,
+    instance,
+    attempts: attempts.slice(-5),
+    status,
+  });
   await logWhatsApp(phone, body, status, session);
   return { ok: false, status, attempts };
 }

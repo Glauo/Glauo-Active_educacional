@@ -1,4 +1,5 @@
 import { dbGet, dbList, dbSet, dbUpdate } from "@/lib/db";
+import { releaseStudentAccessAfterPayment } from "@/lib/student-payment-automation";
 
 type Row = Record<string, unknown>;
 type ReconcileState = {
@@ -360,6 +361,11 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
 
   await Promise.all(writes);
 
+  let releaseResult: Row | null = null;
+  if (paid) {
+    releaseResult = await releaseStudentAccessAfterPayment(next, paymentId) as unknown as Row;
+  }
+
   await audit({
     acao: manualSettlementLocked && !paid
       ? "ignorar_status_mercado_pago_por_baixa_manual"
@@ -373,6 +379,7 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
     external_reference: externalReference,
     status,
     status_detail: statusDetail,
+    liberacao_aluno: releaseResult || {},
     antes: before,
     depois: next,
   });

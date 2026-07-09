@@ -8,6 +8,10 @@ type BoletoConfig = { banco?: string; agencia?: string; conta?: string; cedente?
 
 type Props = { sistema: SistemaConfig; smtp: SmtpConfig; boleto: BoletoConfig };
 
+function emailValido(value: unknown) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim().toLowerCase());
+}
+
 async function salvarSecao(secao: string, dados: Record<string, unknown>): Promise<string | null> {
   const res = await fetch("/api/configuracoes", {
     method: "PUT",
@@ -34,6 +38,14 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
   function sys(field: keyof SistemaConfig, value: string) { setSistema((p) => ({ ...p, [field]: value })); }
   function mtp(field: keyof SmtpConfig, value: string | boolean) { setSmtp((p) => ({ ...p, [field]: value })); }
   function bol(field: keyof BoletoConfig, value: string) { setBoleto((p) => ({ ...p, [field]: value })); }
+  const smtpAtivo = Boolean(smtp.enabled);
+  const smtpConfigurado = Boolean(
+    smtpAtivo
+    && String(smtp.host || "").trim()
+    && String(smtpSenha || smtp.senha || "").trim()
+    && emailValido(smtp.user)
+    && emailValido(smtp.from_email || smtp.from || sistema.email_contato)
+  );
 
   async function salvarTudo() {
     setSaving(true);
@@ -193,8 +205,8 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
               <h3 className="section-title">Configuração de e-mail (SMTP)</h3>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span className={`badge badge-${smtp.enabled ? "success" : "neutral"}`}>
-                <span className="badge-dot" />{smtp.enabled ? "Ativo" : "Inativo"}
+              <span className={`badge badge-${smtpConfigurado ? "success" : smtpAtivo ? "warning" : "neutral"}`}>
+                <span className="badge-dot" />{smtpConfigurado ? "Configurado" : smtpAtivo ? "Incompleto" : "Inativo"}
               </span>
               <button
                 type="button"
@@ -222,6 +234,7 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
               <div className="form-group form-group-span2">
                 <label className="form-label">Nova senha</label>
                 <input className="form-input" type="password" value={smtpSenha} onChange={(e) => setSmtpSenha(e.target.value)} placeholder="Deixe em branco para manter a atual" />
+                <div className="form-help">O login SMTP precisa ser um e-mail real da caixa postal. Nome de pessoa nao autentica no servidor.</div>
               </div>
               <div className="form-group form-group-span2">
                 <label className="form-label">Nome do remetente</label>
@@ -230,6 +243,7 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
               <div className="form-group">
                 <label className="form-label">E-mail remetente</label>
                 <input className="form-input" type="email" value={String(smtp.from_email || smtp.from || "")} onChange={(e) => mtp("from_email", e.target.value)} placeholder="financeiro@active.edu.br" />
+                <div className="form-help">Use um remetente valido da mesma conta SMTP ou autorizado por ela.</div>
               </div>
               <div className="form-group">
                 <label className="form-label">Segurança</label>

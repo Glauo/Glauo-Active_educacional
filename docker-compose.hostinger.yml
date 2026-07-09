@@ -86,7 +86,7 @@ services:
       WAPI_BASE_URL: ${WAPI_BASE_URL:-}
       WAPI_TOKEN: ${WAPI_TOKEN:-}
       WAPI_INSTANCE_ID: ${WAPI_INSTANCE_ID:-}
-      WIZBOT_PAUSED: "1"
+      WIZBOT_PAUSED: ${WIZBOT_PAUSED:-0}
       CRON_SECRET: ${CRON_SECRET:-ae-cron-boletos-2026}
       FRONTEND_INTERNAL_URL: "http://ativo_educacional_app:3000"
     expose:

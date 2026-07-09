@@ -264,6 +264,19 @@ export function AppShell({
     return () => { alive = false; };
   }, [pathname]);
 
+  useEffect(() => {
+    setMobileOpen(false);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("mobile-nav-open", mobileOpen);
+    return () => document.body.classList.remove("mobile-nav-open");
+  }, [mobileOpen]);
+
   async function handleLogout() {
     setLoggingOut(true);
     try {
