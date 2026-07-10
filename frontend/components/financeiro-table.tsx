@@ -195,6 +195,49 @@ function shortPaymentId(value: unknown) {
   return raw.length > 14 ? raw.slice(-14) : raw;
 }
 
+function paymentStatusValue(lancamento: Lancamento) {
+  return String(
+    lancamento.payment_status ||
+    lancamento.mercado_pago_status ||
+    lancamento.mp_status ||
+    lancamento.pix_status ||
+    lancamento.boleto_status ||
+    ""
+  ).trim().toLowerCase();
+}
+
+function paymentProblemState(lancamento: Lancamento) {
+  const status = paymentStatusValue(lancamento);
+  return status.includes("reject")
+    || status.includes("cancel")
+    || status.includes("refunded")
+    || status.includes("charged_back")
+    || status.includes("contestad")
+    || status.includes("erro");
+}
+
+function hasMercadoPagoHistory(lancamento: Lancamento) {
+  return Boolean(String(
+    lancamento.mercado_pago_payment_id ||
+    lancamento.mp_payment_id ||
+    lancamento.mercado_pago_ticket_url ||
+    lancamento.boleto_url ||
+    lancamento.boleto_codigo ||
+    lancamento.pix_codigo ||
+    lancamento.mercado_pago_previous_payment_id ||
+    ""
+  ).trim());
+}
+
+function refreshKeepingPosition(router: ReturnType<typeof useRouter>) {
+  const top = typeof window !== "undefined" ? window.scrollY : 0;
+  router.refresh();
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 30);
+    window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 180);
+  }
+}
+
 function boletoLink(lancamento: Lancamento) {
   const href = boletoPdfHref(lancamento);
   if (href) return absoluteUrl(href);
@@ -310,7 +353,7 @@ function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
 
   return (
     <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={sending} title={!phone ? "Busca o WhatsApp no cadastro do aluno antes de enviar" : ""}>
-      {sending ? "Enviando..." : "WhatsApp"}
+      {sending ? "Enviando..." : "Cobrar"}
     </button>
   );
 }
@@ -359,24 +402,26 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
   const pdfHref = canOpenMercadoPagoCharge(lancamento) ? boletoPdfHref(lancamento) : "";
-  const hasMercadoPagoHistory = Boolean(String(
-    lancamento.mercado_pago_payment_id ||
-    lancamento.mp_payment_id ||
-    lancamento.mercado_pago_ticket_url ||
-    lancamento.boleto_url ||
-    lancamento.boleto_codigo ||
-    ""
-  ).trim());
-  const openLabel = hasMercadoPagoHistory ? "Abrir boleto" : "Abrir PDF";
+  const hasHistory = hasMercadoPagoHistory(lancamento);
+  const needsRefresh = !pdfHref || paymentProblemState(lancamento);
+  const actionLabel = !needsRefresh
+    ? "Boleto"
+    : hasHistory
+      ? "Atualizar boleto MP"
+      : "Gerar boleto MP";
 
   async function gerar() {
     if (!id) return;
+    if (pdfHref && !needsRefresh) {
+      window.open(pdfHref, "_blank", "noopener,noreferrer");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(hasMercadoPagoHistory ? "/api/financeiro/regerar-boleto" : "/api/financeiro", {
-        method: hasMercadoPagoHistory ? "POST" : "PUT",
+      const res = await fetch(hasHistory ? "/api/financeiro/regerar-boleto" : "/api/financeiro", {
+        method: hasHistory ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(hasMercadoPagoHistory ? { id } : { id, tipo: "recebimentos", gerar_boleto: true })
+        body: JSON.stringify(hasHistory ? { id } : { id, tipo: "recebimentos", gerar_boleto: true })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -393,11 +438,9 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   }
 
   return (
-    <>
-      {pdfHref && <a className="btn btn-secondary btn-sm" href={pdfHref} target="_blank" rel="noreferrer">{openLabel}</a>}
-      <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar boleto MP"}</button>
-      <BoletoWhatsAppButton lancamento={lancamento} />
-    </>
+    <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>
+      {loading ? "Gerando..." : actionLabel}
+    </button>
   );
 }
 
@@ -405,9 +448,20 @@ function PixBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
   const href = canOpenMercadoPagoCharge(lancamento) ? pixHref(lancamento) : "";
+  const hasHistory = hasMercadoPagoHistory(lancamento);
+  const needsRefresh = !href || paymentProblemState(lancamento);
+  const actionLabel = !needsRefresh
+    ? "Pix"
+    : hasHistory
+      ? "Atualizar Pix MP"
+      : "Gerar Pix MP";
 
   async function gerar() {
     if (!id) return;
+    if (href && !needsRefresh) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/financeiro/pix", {
@@ -432,10 +486,9 @@ function PixBtn({ lancamento }: { lancamento: Lancamento }) {
   }
 
   return (
-    <>
-      {href && <a className="btn btn-secondary btn-sm" href={href} target="_blank" rel="noreferrer">Abrir Pix</a>}
-      <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>{loading ? "Gerando..." : "Gerar Pix MP"}</button>
-    </>
+    <button className="btn btn-secondary btn-sm" onClick={gerar} disabled={loading}>
+      {loading ? "Gerando..." : actionLabel}
+    </button>
   );
 }
 
@@ -450,8 +503,9 @@ function VerificarPagamentoBtn({ lancamento }: { lancamento: Lancamento }) {
     lancamento.pix_codigo ||
     ""
   ).trim();
+  const pago = statusBadge(String(lancamento.status || lancamento.situacao || "")) === "success";
 
-  if (!id && !paymentId) return null;
+  if (pago || !paymentId) return null;
 
   async function verificar() {
     setLoading(true);
@@ -467,7 +521,7 @@ function VerificarPagamentoBtn({ lancamento }: { lancamento: Lancamento }) {
         return;
       }
       alert(String(data.message || "Pagamento consultado com sucesso."));
-      router.refresh();
+      refreshKeepingPosition(router);
     } finally {
       setLoading(false);
     }
@@ -475,7 +529,7 @@ function VerificarPagamentoBtn({ lancamento }: { lancamento: Lancamento }) {
 
   return (
     <button className="btn btn-ghost btn-sm" type="button" onClick={verificar} disabled={loading}>
-      {loading ? "Verificando..." : "Verificar pagamento"}
+      {loading ? "Verificando..." : "Verificar"}
     </button>
   );
 }
@@ -833,7 +887,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
       return;
     }
     setSelecionados([]);
-    router.refresh();
+    refreshKeepingPosition(router);
   }
 
   return (
@@ -939,9 +993,10 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                       const nome = String(r.aluno || r.nome || r.descricao || `LanÃ§amento ${i + 1}`);
                       const venc = String(r.vencimento || r.data_vencimento || "â€”");
                       const status = String(r.status || r.situacao || "Pendente");
-                      const atrasado = venc !== "â€”" && statusBadge(status) !== "success" && parseBRDate(venc) < new Date();
+                      const pago = statusBadge(status) === "success";
+                      const atrasado = venc !== "â€”" && !pago && parseBRDate(venc) < new Date();
                       const id = String(r.id || "");
-                      const podeExcluir = Boolean(id) && statusBadge(status) !== "success";
+                      const podeExcluir = Boolean(id) && !pago;
                       return (
                         <tr key={String(r.id || i)}>
                           <td>
@@ -974,7 +1029,18 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                           <td><span style={{ fontWeight: 600, color: atrasado ? "var(--red-600)" : "inherit" }}>{venc !== "â€”" ? fmtDate(venc) : "â€”"}{atrasado && " âš "}</span></td>
 	                          <td><span style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{formatBRL(valorParcela(r))}</span></td>
                           <td><span className={`badge badge-${statusBadge(status)}`}><span className="badge-dot" />{status}</span></td>
-                          <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}><BaixaBtn lancamento={r} tipo="recebimentos" /><BoletoBtn lancamento={r} /><PixBtn lancamento={r} /><VerificarPagamentoBtn lancamento={r} /><ReciboBtn lancamento={r} /><EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} /><EditarLancamentoBtn lancamento={r} tipo="recebimentos" /></div></td>
+                          <td>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              <BaixaBtn lancamento={r} tipo="recebimentos" />
+                              {!pago && <BoletoBtn lancamento={r} />}
+                              {!pago && <PixBtn lancamento={r} />}
+                              {!pago && <BoletoWhatsAppButton lancamento={r} />}
+                              {!pago && <VerificarPagamentoBtn lancamento={r} />}
+                              <ReciboBtn lancamento={r} />
+                              <EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} />
+                              <EditarLancamentoBtn lancamento={r} tipo="recebimentos" />
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}

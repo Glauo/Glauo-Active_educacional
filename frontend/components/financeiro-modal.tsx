@@ -181,6 +181,15 @@ function mailtoUrl(email: string, subject: string, body: string) {
   return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+function refreshKeepingPosition(router: ReturnType<typeof useRouter>) {
+  const top = typeof window !== "undefined" ? window.scrollY : 0;
+  router.refresh();
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 30);
+    window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 180);
+  }
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 45000) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -695,7 +704,7 @@ export function NovoLancamentoBtn({ alunos = [] }: { alunos?: AlunoOption[] }) {
         <LancamentoModal
           alunos={alunos}
           onClose={() => setOpen(false)}
-          onSaved={() => { router.refresh(); }}
+          onSaved={() => { refreshKeepingPosition(router); }}
         />
       )}
     </>
@@ -775,7 +784,7 @@ export function ImportarBoletoPdfBtn({
         whatsapp: form.enviar_whatsapp ? { phone: form.aluno_telefone, message: msg.body } : undefined,
         email: form.enviar_email ? mailtoUrl(text(form.aluno_email || item.email), msg.subject, msg.body) : "",
       });
-      router.refresh();
+      refreshKeepingPosition(router);
     } catch (err) {
       setErro(err instanceof DOMException && err.name === "AbortError" ? "Tempo esgotado ao importar boleto. Tente novamente." : "Erro de conexao ao importar boleto.");
     } finally {
@@ -901,7 +910,7 @@ export function EditarLancamentoBtn({ lancamento, tipo }: { lancamento: Lancamen
           lancamento={lancamento}
           tipoInicial={tipo}
           onClose={() => setOpen(false)}
-          onSaved={() => { router.refresh(); }}
+          onSaved={() => { refreshKeepingPosition(router); }}
         />
       )}
     </>
@@ -949,7 +958,7 @@ export function BaixaBtn({ lancamento, tipo }: { lancamento: LancamentoData; tip
       setOpen(false);
       setAviso(true);
       setTimeout(() => setAviso(false), 3500);
-      router.refresh();
+      refreshKeepingPosition(router);
     } catch (err) {
       alert(err instanceof DOMException && err.name === "AbortError" ? "Tempo esgotado ao registrar baixa." : "Erro de conexao ao registrar baixa.");
     } finally {
@@ -1017,7 +1026,7 @@ export function EstornoBtn({ lancamento, tipo, canReverse = true }: { lancamento
       alert(String(data.error || "Erro ao estornar."));
       return;
     }
-    router.refresh();
+    refreshKeepingPosition(router);
   }
 
   return (
