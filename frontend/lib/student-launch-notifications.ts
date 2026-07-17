@@ -3,6 +3,7 @@ import { sendEmail } from "./email";
 import { polishPortugueseText } from "./portuguese-text";
 import { lower, normalizeList, text, type Row } from "./school-modules";
 import { sendWhatsApp } from "./whatsapp";
+import { automaticStudentMessagesEnabled } from "./outbound-policy";
 
 type NotifyResult = {
   push: string;
@@ -118,6 +119,14 @@ export async function notifyStudentsAboutLaunch({
   session?: Pick<SessionUser, "usuario" | "pessoa" | "perfil"> | null;
 }): Promise<NotifyResult> {
   const recipients = targetStudents(students, item);
+  if (!automaticStudentMessagesEnabled()) {
+    return {
+      push: recipients.length ? "portal_sininho_e_inicio" : "sem_destinatarios",
+      whatsapp: "automatico_desativado",
+      email: "automatico_desativado",
+      total_destinatarios: recipients.length,
+    };
+  }
   const linkByKind: Record<typeof kind, string> = {
     licao: "/aluno?tab=licoes",
     desafio: "/aluno?tab=desafios",

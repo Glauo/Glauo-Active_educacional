@@ -3,6 +3,7 @@ import { dbList, dbSet, dbUpdate } from "@/lib/db";
 import { financeMessage } from "@/lib/finance-message";
 import { applyMercadoPagoToLancamento, createMercadoPagoBoleto } from "@/lib/mercadopago-boleto";
 import { sendWhatsApp } from "@/lib/whatsapp";
+import { automaticFinanceMessagesEnabled } from "@/lib/outbound-policy";
 
 type Row = Record<string, unknown>;
 
@@ -117,6 +118,9 @@ async function handleCron(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET || process.env.ACTIVE_CRON_SECRET;
   if (!cronSecret || secret !== cronSecret) {
     return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  }
+  if (!automaticFinanceMessagesEnabled()) {
+    return NextResponse.json({ ok: true, automatico_desativado: true, processados: 0, enviados: 0, erros: 0 });
   }
 
   const startedAt = Date.now();

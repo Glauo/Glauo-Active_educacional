@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { createMercadoPagoBoleto, resolveMercadoPagoBoletoCharge } from "@/lib/mercadopago-boleto";
 import { extractBoletoPdfUrl, extractLinhaDigitavel } from "@/lib/criar-pagamento-boleto";
-import { loadMercadoPagoPayment } from "@/lib/mercadopago-sync";
+import { cancelMercadoPagoPayment, loadMercadoPagoPayment } from "@/lib/mercadopago-sync";
 
 type Row = Record<string, unknown>;
 
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 
   const origin = new URL(req.url).origin;
   const charge = await resolveMercadoPagoBoletoCharge(lancamento);
-  const paymentId = text(lancamento.mercado_pago_payment_id || lancamento.mp_payment_id || lancamento.boleto_codigo);
+  const paymentId = text(lancamento.boleto_mercado_pago_payment_id || lancamento.mercado_pago_payment_id || lancamento.mp_payment_id || lancamento.boleto_codigo);
   if (paymentId) {
     try {
       const payment = await loadMercadoPagoPayment(paymentId);
@@ -108,6 +108,13 @@ export async function GET(req: NextRequest) {
         paymentStatusRequiresReplacement(paymentStatus) ||
         (charge.transactionAmount > 0 && paymentAmount > 0 && Math.abs(paymentAmount - charge.transactionAmount) >= 0.01);
       if (needsReplacement) {
+        if (["pending", "in_process", "authorized"].includes(paymentStatus.toLowerCase())) {
+          try {
+            await cancelMercadoPagoPayment(paymentId);
+          } catch (error) {
+            return errorHtml("Nao foi possivel atualizar o boleto", "O boleto anterior continua ativo e nenhuma cobranca duplicada foi criada.", error instanceof Error ? error.message : "Falha ao cancelar pagamento anterior.");
+          }
+        }
         const regenerated = await createMercadoPagoBoleto(lancamento, id, origin, { forceNewPayment: true });
         if (regenerated.ok) {
           if (regenerated.url) return NextResponse.redirect(regenerated.url);

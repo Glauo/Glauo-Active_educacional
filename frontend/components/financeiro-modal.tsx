@@ -167,8 +167,8 @@ function boletoImportForm(aluno?: AlunoOption) {
     valor: aluno ? studentMonthlyValue(aluno) : "",
     vencimento: text(aluno?.vencimento),
     categoria: "Mensalidade",
-    enviar_whatsapp: true,
-    enviar_email: true,
+    enviar_whatsapp: false,
+    enviar_email: false,
     observacoes: "",
   };
 }
@@ -238,8 +238,8 @@ function baseForm(lancamento?: LancamentoData, tipoInicial?: "recebimentos" | "d
     vencimento: text(lancamento?.vencimento || lancamento?.data_vencimento) || hoje(),
     status: text(lancamento?.status || "Pendente"),
     gerar_boleto: Boolean(lancamento?.boleto_pdf_url || lancamento?.boleto_status),
-    enviar_whatsapp: true,
-    enviar_email: true,
+    enviar_whatsapp: false,
+    enviar_email: false,
     observacoes: text(lancamento?.observacoes),
   };
 }

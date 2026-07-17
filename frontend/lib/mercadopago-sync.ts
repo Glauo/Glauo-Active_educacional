@@ -114,6 +114,24 @@ export async function loadMercadoPagoPayment(paymentId: string) {
   return data;
 }
 
+export async function cancelMercadoPagoPayment(paymentId: string) {
+  const config = await dbGet<Row>("boleto_config.json");
+  const token = boletoToken(config);
+  if (!token) throw new Error("Mercado Pago Access Token nao configurado.");
+  const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: "cancelled" }),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({})) as Row;
+  if (!res.ok) throw new Error(text(data.message || data.error || `Mercado Pago HTTP ${res.status}`));
+  return data;
+}
+
 function mappedFinanceStatus(status: string) {
   switch (lower(status)) {
     case "approved":
@@ -172,6 +190,7 @@ function findReceivableIndex(receivables: Row[], payment: Row, paymentId: string
       item.mp_payment_id,
       item.boleto_codigo,
       item.pix_codigo,
+      ...(Array.isArray(item.mercado_pago_payment_history) ? item.mercado_pago_payment_history : []),
     ].map(text).filter(Boolean);
     return itemRefs.includes(paymentId) || refs.exact.some((ref) => itemRefs.includes(ref));
   });
@@ -276,6 +295,23 @@ export async function syncMercadoPagoPayment(paymentId: string, source: "webhook
   }
 
   const before = receivables[idx];
+  const currentPaymentId = text(before.mercado_pago_payment_id || before.mp_payment_id);
+  const paymentHistory = Array.isArray(before.mercado_pago_payment_history)
+    ? before.mercado_pago_payment_history.map(text)
+    : [];
+  const stalePayment = Boolean(currentPaymentId && currentPaymentId !== paymentId && paymentHistory.includes(paymentId));
+  if (stalePayment && !paid) {
+    await audit({
+      acao: "ignorar_status_pagamento_mercado_pago_substituido",
+      origem: source,
+      lancamento_id: before.id,
+      mercado_pago_payment_id: paymentId,
+      mercado_pago_payment_id_atual: currentPaymentId,
+      status,
+      status_detail: statusDetail,
+    });
+    return { ok: true, matched: true, paid: false, paymentId, status, lancamento: before };
+  }
   const paymentDate = toIsoDate(payment.date_approved || payment.date_last_updated || payment.date_created, now);
   const paidAmount =
     moneyNumber((payment.transaction_details as Row | undefined)?.total_paid_amount) ||

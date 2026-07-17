@@ -3,7 +3,7 @@ import { dbList, dbListWithoutKeys, dbSet } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isAdminOrCoordinator } from "@/lib/roles";
 import { isVipModule, isVipUnlimitedPlan, migrateModule, teacherClassValueByModule, VIP_DEFAULT_TOTAL, VIP_UNLIMITED, vipPlanTotal } from "@/lib/course-modules";
-import { applyGeneratedStudentCredentials, notifyStudentCredentials } from "@/lib/student-credentials";
+import { applyGeneratedStudentCredentials } from "@/lib/student-credentials";
 import { ensureStudentMonthlyBilling } from "@/lib/monthly-billing";
 
 const KEY = "students.json";
@@ -136,8 +136,7 @@ export async function POST(req: NextRequest) {
     alunos.push(novo);
     await dbSet(KEY, alunos);
     await ensureStudentMonthlyBilling(novo, session);
-    const notification_status = await notifyStudentCredentials(novo, session);
-    return NextResponse.json({ ok: true, aluno: novo, notification_status }, { status: 201 });
+    return NextResponse.json({ ok: true, aluno: novo, notification_status: { whatsapp: "nao_enviado", email: "nao_enviado" } }, { status: 201 });
   } catch (err) {
     console.error("[alunos POST]", err);
     return NextResponse.json({ error: "Erro ao salvar aluno." }, { status: 500 });
@@ -162,8 +161,7 @@ export async function PUT(req: NextRequest) {
     alunos[idx] = { ...alunos[idx], ...normalizeAluno(updates), updated_at: new Date().toISOString() };
     await dbSet(KEY, alunos);
     await ensureStudentMonthlyBilling(alunos[idx], session);
-    const notification_status = await notifyStudentCredentials(alunos[idx], session);
-    return NextResponse.json({ ok: true, aluno: alunos[idx], notification_status });
+    return NextResponse.json({ ok: true, aluno: alunos[idx], notification_status: { whatsapp: "nao_enviado", email: "nao_enviado" } });
   } catch (err) {
     console.error("[alunos PUT]", err);
     return NextResponse.json({ error: "Erro ao atualizar aluno." }, { status: 500 });

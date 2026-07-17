@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList } from "@/lib/db";
-import { createMercadoPagoPix } from "@/lib/mercadopago-boleto";
+import { createMercadoPagoPix, resolveMercadoPagoBoletoCharge } from "@/lib/mercadopago-boleto";
+import { cancelMercadoPagoPayment, loadMercadoPagoPayment } from "@/lib/mercadopago-sync";
 
 type Row = Record<string, unknown>;
 
@@ -11,6 +12,22 @@ function text(value: unknown) {
 
 function lower(value: unknown) {
   return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function moneyNumber(value: unknown) {
+  const raw = text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+}
+
+function paymentMethod(value: Row) {
+  const method = value.payment_method && typeof value.payment_method === "object" ? value.payment_method as Row : {};
+  return lower(value.payment_method_id || method.id);
+}
+
+function reusablePixStatus(value: unknown) {
+  const status = lower(value);
+  return status === "pending" || status === "in_process";
 }
 
 function isStudentSession(session: { perfil?: string }) {
@@ -70,11 +87,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 403 });
   }
 
+  const charge = await resolveMercadoPagoBoletoCharge(lancamento);
   const existingUrl = text(lancamento.pix_ticket_url);
-  if (existingUrl.startsWith("http")) return NextResponse.redirect(existingUrl);
-  if (text(lancamento.pix_qr_code)) return pixHtml(lancamento);
+  const pixPaymentId = text(
+    lancamento.pix_mercado_pago_payment_id ||
+    lancamento.pix_codigo ||
+    (lower(lancamento.mercado_pago_payment_method) === "pix" ? lancamento.mercado_pago_payment_id : "")
+  );
+  if (pixPaymentId) {
+    try {
+      const payment = await loadMercadoPagoPayment(pixPaymentId);
+      const sameAmount = Math.abs(moneyNumber(payment.transaction_amount) - charge.transactionAmount) < 0.01;
+      if (paymentMethod(payment) === "pix" && reusablePixStatus(payment.status) && sameAmount) {
+        if (existingUrl.startsWith("http")) return NextResponse.redirect(existingUrl);
+        if (text(lancamento.pix_qr_code)) return pixHtml(lancamento);
+      }
+      if (paymentMethod(payment) === "pix" && reusablePixStatus(payment.status) && !sameAmount) {
+        try {
+          await cancelMercadoPagoPayment(pixPaymentId);
+        } catch (error) {
+          return errorHtml("Nao foi possivel atualizar o PIX", "O PIX anterior continua ativo e nenhuma cobranca duplicada foi criada.", error instanceof Error ? error.message : "Falha ao cancelar pagamento anterior.");
+        }
+      }
+    } catch {
+      const sameSavedAmount = Math.abs(moneyNumber(lancamento.pix_valor_atualizado) - charge.transactionAmount) < 0.01;
+      if (sameSavedAmount && existingUrl.startsWith("http")) return NextResponse.redirect(existingUrl);
+      if (sameSavedAmount && text(lancamento.pix_qr_code)) return pixHtml(lancamento);
+    }
+  }
 
-  const generated = await createMercadoPagoPix(lancamento, id, new URL(req.url).origin);
+  const generated = await createMercadoPagoPix(lancamento, id, new URL(req.url).origin, { forceNewPayment: Boolean(pixPaymentId || existingUrl || lancamento.pix_qr_code) });
   if (generated.ok) {
     if (generated.url) return NextResponse.redirect(generated.url);
     const refreshed = await findLancamento(id);
@@ -94,7 +136,41 @@ export async function POST(req: NextRequest) {
   const lancamento = await findLancamento(id);
   if (!lancamento) return NextResponse.json({ error: "Lancamento nao encontrado" }, { status: 404 });
 
-  const generated = await createMercadoPagoPix(lancamento, id, new URL(req.url).origin);
+  const existingPaymentId = text(
+    lancamento.pix_mercado_pago_payment_id ||
+    lancamento.pix_codigo ||
+    (lower(lancamento.mercado_pago_payment_method) === "pix" ? lancamento.mercado_pago_payment_id : "")
+  );
+  if (existingPaymentId) {
+    try {
+      const payment = await loadMercadoPagoPayment(existingPaymentId);
+      if (lower(payment.status) === "approved") {
+        return NextResponse.json({ error: "Este PIX ja foi pago. Verifique o pagamento antes de gerar outra cobranca." }, { status: 409 });
+      }
+      if (paymentMethod(payment) === "pix" && reusablePixStatus(payment.status)) {
+        const charge = await resolveMercadoPagoBoletoCharge(lancamento);
+        const sameAmount = Math.abs(moneyNumber(payment.transaction_amount) - charge.transactionAmount) < 0.01;
+        if (sameAmount && (text(lancamento.pix_ticket_url) || text(lancamento.pix_qr_code))) {
+          return NextResponse.json({
+            ok: true,
+            url: text(lancamento.pix_ticket_url),
+            qr_code: text(lancamento.pix_qr_code),
+            qr_code_base64: text(lancamento.pix_qr_code_base64),
+            payment_id: existingPaymentId,
+            lancamento,
+          });
+        }
+        await cancelMercadoPagoPayment(existingPaymentId);
+      }
+    } catch (error) {
+      return NextResponse.json({
+        error: "Nao foi possivel verificar/cancelar o PIX anterior. Nenhuma cobranca duplicada foi criada.",
+        detail: error instanceof Error ? error.message : "Falha de comunicacao com o Mercado Pago.",
+      }, { status: 422 });
+    }
+  }
+
+  const generated = await createMercadoPagoPix(lancamento, id, new URL(req.url).origin, { forceNewPayment: Boolean(existingPaymentId) });
   if (!generated.ok) {
     return NextResponse.json({
       ok: false,

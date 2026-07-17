@@ -44,6 +44,20 @@ type ProfessorOption = {
   [k: string]: unknown;
 };
 
+type AlunoOption = {
+  id?: string;
+  _id?: string;
+  uuid?: string;
+  matricula?: string;
+  nome?: string;
+  name?: string;
+  turma?: string;
+  classe?: string;
+  status?: string;
+  situacao?: string;
+  [k: string]: unknown;
+};
+
 type Form = {
   nome: string;
   modulo: string;
@@ -80,6 +94,18 @@ function formatDias(dias: string[], inicio: string, fim: string) {
   return `${diasTxt}${horario}`;
 }
 
+function alunoKey(aluno: AlunoOption) {
+  return String(aluno.id || aluno._id || aluno.uuid || aluno.matricula || aluno.nome || aluno.name || "").trim();
+}
+
+function alunoName(aluno: AlunoOption) {
+  return String(aluno.nome || aluno.name || "Aluno sem nome").trim();
+}
+
+function alunoClass(aluno: AlunoOption) {
+  return String(aluno.turma || aluno.classe || "Sem Turma").trim();
+}
+
 function fromTurma(t?: TurmaData): Form {
   const horaInicio = String(t?.hora_inicio || "").slice(0, 5);
   const horaFim = String(t?.hora_fim || "").slice(0, 5);
@@ -107,6 +133,10 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
   const isEdit = Boolean(turma?.id);
   const [form, setForm] = useState<Form>(fromTurma(turma));
   const [professores, setProfessores] = useState<ProfessorOption[]>([]);
+  const [alunos, setAlunos] = useState<AlunoOption[]>([]);
+  const [selectedAlunoIds, setSelectedAlunoIds] = useState<string[]>([]);
+  const [alunoSearch, setAlunoSearch] = useState("");
+  const [membersLoaded, setMembersLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
   // VIP lesson package (avulsa) only for the pure "Vip" module.
@@ -118,11 +148,38 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
   }, [professores, form.professor]);
 
   useEffect(() => {
-    fetch("/api/professores")
-      .then((res) => res.json())
-      .then((data) => setProfessores(Array.isArray(data?.professores) ? data.professores : []))
-      .catch(() => setProfessores([]));
-  }, []);
+    Promise.all([
+      fetch("/api/professores").then((res) => res.json()),
+      fetch("/api/alunos").then((res) => res.json()),
+    ])
+      .then(([professoresData, alunosData]) => {
+        setProfessores(Array.isArray(professoresData?.professores) ? professoresData.professores : []);
+        const nextAlunos = Array.isArray(alunosData?.alunos) ? alunosData.alunos as AlunoOption[] : [];
+        setAlunos(nextAlunos);
+        const turmaNome = String(turma?.nome || turma?.name || "").trim().toLowerCase();
+        setSelectedAlunoIds(nextAlunos
+          .filter((aluno) => turmaNome && alunoClass(aluno).toLowerCase() === turmaNome)
+          .map(alunoKey)
+          .filter(Boolean));
+        setMembersLoaded(true);
+      })
+      .catch(() => {
+        setProfessores([]);
+        setAlunos([]);
+        setMembersLoaded(false);
+      });
+  }, [turma?.id, turma?.nome, turma?.name]);
+
+  const filteredAlunos = useMemo(() => {
+    const query = alunoSearch.trim().toLowerCase();
+    return alunos
+      .filter((aluno) => {
+        const status = String(aluno.status || aluno.situacao || "Ativo").toLowerCase();
+        return !status.includes("exclu") && !status.includes("inativ");
+      })
+      .filter((aluno) => !query || `${alunoName(aluno)} ${alunoClass(aluno)} ${aluno.matricula || ""}`.toLowerCase().includes(query))
+      .sort((a, b) => alunoName(a).localeCompare(alunoName(b), "pt-BR"));
+  }, [alunos, alunoSearch]);
 
   function update<K extends keyof Form>(field: K, value: Form[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -131,6 +188,11 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
 
   function toggleDia(dia: string) {
     update("dias_semana", form.dias_semana.includes(dia) ? form.dias_semana.filter((d) => d !== dia) : [...form.dias_semana, dia]);
+  }
+
+  function toggleAluno(id: string) {
+    setSelectedAlunoIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setErro("");
   }
 
   async function excluir() {
@@ -164,6 +226,7 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
       tipo_aula: form.modulo,
       modalidade: form.modulo.toLowerCase().includes("online") ? "Online" : "Presencial",
       nivel: form.livro,
+      ...(membersLoaded ? { aluno_ids: selectedAlunoIds } : {}),
     };
     const res = await fetch("/api/turmas", {
       method: isEdit ? "PUT" : "POST",
@@ -284,6 +347,25 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
             <div className="form-group form-group-span2">
               <label className="form-label">Observacoes da turma</label>
               <textarea className="form-input form-textarea" rows={3} value={form.observacoes} onChange={(e) => update("observacoes", e.target.value)} />
+            </div>
+            <div className="form-group form-group-span2">
+              <label className="form-label">Alunos da turma ({selectedAlunoIds.length})</label>
+              <input className="form-input" value={alunoSearch} onChange={(e) => setAlunoSearch(e.target.value)} placeholder="Buscar aluno por nome, matricula ou turma atual" />
+              <div style={{ maxHeight: 230, overflowY: "auto", display: "grid", gap: 6, marginTop: 8, border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
+                {!membersLoaded && <div className="form-help">Carregando alunos...</div>}
+                {membersLoaded && filteredAlunos.length === 0 && <div className="form-help">Nenhum aluno encontrado.</div>}
+                {filteredAlunos.map((aluno) => {
+                  const id = alunoKey(aluno);
+                  const checked = selectedAlunoIds.includes(id);
+                  return (
+                    <label className="attendance-item" key={id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleAluno(id)} />
+                      <span style={{ flex: 1 }}><strong>{alunoName(aluno)}</strong><small style={{ display: "block", color: "var(--text-secondary)" }}>Turma atual: {alunoClass(aluno)}</small></span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="form-help">Ao salvar, os selecionados entram nesta turma; os removidos ficam como Sem Turma.</div>
             </div>
           </div>
           {erro && <div className="form-error">{erro}</div>}

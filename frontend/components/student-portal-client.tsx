@@ -87,13 +87,12 @@ function boletoHref(row: Row) {
   if (id && mercadoPagoHistory) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
   if (text(row.boleto_pdf_url)) return text(row.boleto_pdf_url);
   if (id && text(row.boleto_status || row.gerar_boleto)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
+  if (id && isOpenInvoice(row)) return `/api/financeiro/boleto?id=${encodeURIComponent(id)}`;
   return "";
 }
 
 function pixHref(row: Row) {
   const id = text(row.id);
-  const link = text(row.pix_ticket_url);
-  if (link.startsWith("http")) return link;
   if (id && isOpenInvoice(row)) return `/api/financeiro/pix?id=${encodeURIComponent(id)}`;
   return "";
 }

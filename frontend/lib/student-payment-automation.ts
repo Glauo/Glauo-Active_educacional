@@ -1,6 +1,7 @@
 import { dbList, dbSet, dbUpdate } from "./db";
 import { applyGeneratedStudentCredentials, notifyStudentCredentials } from "./student-credentials";
 import { ensureStudentMonthlyBilling } from "./monthly-billing";
+import { automaticStudentMessagesEnabled } from "./outbound-policy";
 
 type Row = Record<string, unknown>;
 
@@ -117,7 +118,7 @@ export async function releaseStudentAccessAfterPayment(receivable: Row, paymentI
   await ensureStudentMonthlyBilling(next, { usuario: "mercado_pago", pessoa: "Mercado Pago", perfil: "Sistema" });
 
   const samePaymentAlreadyNotified = text(before.portal_liberado_notificado_pagamento_id) === paymentId;
-  const shouldNotify = !samePaymentAlreadyNotified && Boolean(text(next.login || next.usuario) && text(next.senha));
+  const shouldNotify = automaticStudentMessagesEnabled() && !samePaymentAlreadyNotified && Boolean(text(next.login || next.usuario) && text(next.senha));
   let notificationStatus: Row | null = null;
   if (shouldNotify) {
     notificationStatus = await notifyStudentCredentials(next, { usuario: "mercado_pago", pessoa: "Mercado Pago", perfil: "Sistema" });

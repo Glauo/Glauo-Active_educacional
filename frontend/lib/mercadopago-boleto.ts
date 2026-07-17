@@ -27,11 +27,8 @@ export type MercadoPagoBoletoCharge = {
 };
 
 type MercadoPagoBoletoExpiration = {
-  dateOfExpiration: string;
-  reason: "matching_due_date";
-} | {
   dateOfExpiration: "";
-  reason: "missing_due_date" | "past_due" | "beyond_mercado_pago_window";
+  reason: "not_sent_active_managed";
 };
 
 function text(value: unknown) {
@@ -126,23 +123,8 @@ function boletoPenaltyRates(_config: Row | null) {
 }
 
 function resolveMercadoPagoBoletoExpiration(lancamento: Row): MercadoPagoBoletoExpiration {
-  const due = parseDateOnly(lancamento.vencimento || lancamento.data_vencimento);
-  if (!due) return { dateOfExpiration: "", reason: "missing_due_date" };
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDay = new Date(due);
-  dueDay.setHours(0, 0, 0, 0);
-
-  if (dueDay < today) return { dateOfExpiration: "", reason: "past_due" };
-
-  const daysAhead = Math.floor((dueDay.getTime() - today.getTime()) / 86400000);
-  if (daysAhead > 29) return { dateOfExpiration: "", reason: "beyond_mercado_pago_window" };
-
-  return {
-    dateOfExpiration: isoExpirationEndOfDay(dueDay),
-    reason: "matching_due_date",
-  };
+  void lancamento;
+  return { dateOfExpiration: "", reason: "not_sent_active_managed" };
 }
 
 function calculateBoletoCharge(lancamento: Row, config: Row | null): MercadoPagoBoletoCharge {
@@ -535,6 +517,14 @@ export async function createMercadoPagoBoleto(
       external_reference: id,
       payment_external_reference: id,
       mercado_pago_payment_id: result.paymentId,
+      mercado_pago_previous_payment_id: text(item.mercado_pago_payment_id) && text(item.mercado_pago_payment_id) !== result.paymentId
+        ? text(item.mercado_pago_payment_id)
+        : text(item.mercado_pago_previous_payment_id),
+      mercado_pago_payment_history: Array.from(new Set([
+        ...(Array.isArray(item.mercado_pago_payment_history) ? item.mercado_pago_payment_history.map(text) : []),
+        text(item.mercado_pago_payment_id),
+        result.paymentId,
+      ].filter(Boolean))),
       mercado_pago_status: result.status,
       mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
       mercado_pago_transaction_amount: charge.transactionAmount,
@@ -548,6 +538,7 @@ export async function createMercadoPagoBoleto(
       boleto_linha_digitavel: result.linhaDigitavel,
       boleto_status: "Mercado Pago",
       boleto_codigo: result.paymentId || text(item.boleto_codigo),
+      boleto_mercado_pago_payment_id: result.paymentId,
       boleto_gerado_em: new Date().toISOString(),
       boleto_valor_original: charge.baseAmount,
       boleto_valor_atualizado: charge.transactionAmount,
@@ -573,7 +564,8 @@ export async function createMercadoPagoBoleto(
 export async function createMercadoPagoPix(
   lancamento: Row,
   id: string,
-  origin: string
+  origin: string,
+  options: MercadoPagoCreateOptions = {}
 ): Promise<MercadoPagoPixResult> {
   const [config, sistema, students] = await Promise.all([
     dbGet<Row>("boleto_config.json"),
@@ -593,8 +585,8 @@ export async function createMercadoPagoPix(
     };
   }
 
-  const amount = moneyNumber(pixLancamento.valor_parcela ?? pixLancamento.valor);
-  if (!amount) {
+  const charge = calculateBoletoCharge(pixLancamento, config);
+  if (!charge.baseAmount) {
     return { ok: false, title: "Valor invalido", message: "Este lancamento nao tem valor valido para gerar PIX." };
   }
 
@@ -652,13 +644,17 @@ export async function createMercadoPagoPix(
   }
 
   const notificationUrl = text(process.env.ACTIVE_MERCADO_PAGO_WEBHOOK_URL || config?.webhook_url) || `${origin}/api/financeiro/mercado-pago/webhook`;
+  const amountKey = Math.round(charge.transactionAmount * 100);
+  const idempotencyKey = options.forceNewPayment
+    ? `active-pix-${id}-${amountKey}-${Date.now()}`
+    : `active-pix-${id}-${amountKey}-${charge.daysLate}`;
   const result = await criarPagamentoPix({
     accessToken: token,
-    transactionAmount: amount,
+    transactionAmount: charge.transactionAmount,
     description: text(pixLancamento.descricao) || "Mensalidade escolar",
     externalReference: id,
     notificationUrl,
-    idempotencyKey: `active-pix-${id}`,
+    idempotencyKey,
     metadata: {
       sistema: "active_educacional",
       lancamento_id: id,
@@ -666,6 +662,12 @@ export async function createMercadoPagoPix(
       aluno_id: text(pixLancamento.aluno_id || aluno?.id),
       aluno_login: text(pixLancamento.aluno_login || aluno?.login || aluno?.usuario),
       meio_pagamento: "pix",
+      valor_original: charge.baseAmount,
+      valor_atualizado: charge.transactionAmount,
+      dias_atraso: charge.daysLate,
+      multa_percentual: charge.finePercent,
+      juros_dia_percentual: charge.dailyInterestPercent,
+      vencimento_lancamento: charge.dueDate,
     },
     payer: {
       email,
@@ -694,6 +696,14 @@ export async function createMercadoPagoPix(
       external_reference: id,
       payment_external_reference: id,
       mercado_pago_payment_id: result.paymentId,
+      mercado_pago_previous_payment_id: text(item.mercado_pago_payment_id) && text(item.mercado_pago_payment_id) !== result.paymentId
+        ? text(item.mercado_pago_payment_id)
+        : text(item.mercado_pago_previous_payment_id),
+      mercado_pago_payment_history: Array.from(new Set([
+        ...(Array.isArray(item.mercado_pago_payment_history) ? item.mercado_pago_payment_history.map(text) : []),
+        text(item.mercado_pago_payment_id),
+        result.paymentId,
+      ].filter(Boolean))),
       mercado_pago_status: result.status,
       mercado_pago_detail: text((result.raw.status_detail as unknown) || ""),
       mercado_pago_payment_method: "pix",
@@ -702,7 +712,17 @@ export async function createMercadoPagoPix(
       pix_qr_code_base64: result.qrCodeBase64,
       pix_status: "Mercado Pago",
       pix_codigo: result.paymentId || text(item.pix_codigo),
+      pix_mercado_pago_payment_id: result.paymentId,
+      pix_previous_payment_id: text(item.pix_mercado_pago_payment_id || item.pix_codigo),
       pix_gerado_em: new Date().toISOString(),
+      pix_valor_original: charge.baseAmount,
+      pix_valor_atualizado: charge.transactionAmount,
+      pix_dias_atraso: charge.daysLate,
+      pix_multa_percentual: charge.finePercent,
+      pix_juros_dia_percentual: charge.dailyInterestPercent,
+      pix_vencimento_lancamento: charge.dueDate,
+      pix_atualizado_em: new Date().toISOString(),
+      pix_permite_pagamento_apos_vencimento: true,
       status: text(item.status) || "PIX gerado",
     };
     savedLancamento = updated;
