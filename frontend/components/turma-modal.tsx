@@ -131,7 +131,8 @@ function fromTurma(t?: TurmaData): Form {
 }
 
 function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: () => void; onSaved: () => void }) {
-  const isEdit = Boolean(turma?.id);
+  const isEdit = Boolean(turma);
+  const turmaIdentifier = String(turma?.id || turma?.nome || turma?.name || "").trim();
   const [form, setForm] = useState<Form>(fromTurma(turma));
   const [professores, setProfessores] = useState<ProfessorOption[]>([]);
   const [alunos, setAlunos] = useState<AlunoOption[]>([]);
@@ -197,11 +198,11 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
   }
 
   async function excluir() {
-    if (!confirm(`Excluir a turma "${turma?.nome}"? Os alunos vinculados voltarao para Sem Turma.`)) return;
+    if (!confirm(`Excluir a turma "${form.nome}"? Os alunos vinculados voltarao para Sem Turma.`)) return;
     setSaving(true);
     setErro("");
     try {
-      const res = await fetch(`/api/turmas?id=${encodeURIComponent(String(turma!.id || turma!.nome))}`, { method: "DELETE" });
+      const res = await fetch(`/api/turmas?id=${encodeURIComponent(turmaIdentifier)}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setErro(String(data.error || "Nao foi possivel excluir a turma."));
@@ -227,7 +228,7 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
     setSaving(true);
     setErro("");
     const payload = {
-      ...(isEdit ? { id: turma!.id || turma!.nome } : {}),
+      ...(isEdit ? { id: turmaIdentifier } : {}),
       ...form,
       professor: form.professor || "Sem Professor",
       dias: formatDias(form.dias_semana, form.hora_inicio, form.hora_fim),
@@ -262,8 +263,8 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
       <div className="modal-box turma-modal-box" style={{ maxWidth: 900 }}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">{isEdit ? "Editar turma completa" : "Nova turma completa"}</div>
-            <div className="modal-subtitle">Modulo de aula, professor, livro, agenda e plano VIP como no sistema anterior</div>
+            <div className="modal-title">{isEdit ? `Editar turma: ${form.nome}` : "Criar nova turma"}</div>
+            <div className="modal-subtitle">{isEdit ? "Dados, agenda e alunos vinculados." : "Cadastro de dados, agenda e alunos."}</div>
           </div>
           <button className="modal-close" onClick={onClose}>
             <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
