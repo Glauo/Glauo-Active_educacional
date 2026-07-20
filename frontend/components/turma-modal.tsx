@@ -89,7 +89,8 @@ function splitDias(value: unknown): string[] {
 }
 
 function formatDias(dias: string[], inicio: string, fim: string) {
-  const diasTxt = dias.length ? dias.join(", ") : "Sem dias definidos";
+  if (!dias.length) return "Sem dias definidos";
+  const diasTxt = dias.join(", ");
   const horario = inicio && fim ? ` - ${inicio} às ${fim}` : "";
   return `${diasTxt}${horario}`;
 }
@@ -198,9 +199,20 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
   async function excluir() {
     if (!confirm(`Excluir a turma "${turma?.nome}"? Os alunos vinculados voltarao para Sem Turma.`)) return;
     setSaving(true);
-    await fetch(`/api/turmas?id=${encodeURIComponent(String(turma!.id || turma!.nome))}`, { method: "DELETE" });
-    setSaving(false);
-    onSaved();
+    setErro("");
+    try {
+      const res = await fetch(`/api/turmas?id=${encodeURIComponent(String(turma!.id || turma!.nome))}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErro(String(data.error || "Nao foi possivel excluir a turma."));
+        return;
+      }
+      onSaved();
+    } catch {
+      setErro("Erro de conexao ao excluir a turma.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function salvar() {
@@ -208,15 +220,12 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
       setErro("O nome da turma e obrigatorio.");
       return;
     }
-    if (!form.dias_semana.length) {
-      setErro("Selecione pelo menos um dia de aula.");
-      return;
-    }
-    if (form.hora_fim <= form.hora_inicio) {
+    if (form.dias_semana.length && form.hora_inicio && form.hora_fim && form.hora_fim <= form.hora_inicio) {
       setErro("O horario final precisa ser maior que o inicial.");
       return;
     }
     setSaving(true);
+    setErro("");
     const payload = {
       ...(isEdit ? { id: turma!.id || turma!.nome } : {}),
       ...form,
@@ -228,24 +237,29 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
       nivel: form.livro,
       ...(membersLoaded ? { aluno_ids: selectedAlunoIds } : {}),
     };
-    const res = await fetch("/api/turmas", {
-      method: isEdit ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setErro((d as { error?: string }).error || "Erro ao salvar.");
-      return;
+    try {
+      const res = await fetch("/api/turmas", {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setErro((d as { error?: string }).error || "Erro ao salvar.");
+        return;
+      }
+      onSaved();
+    } catch {
+      setErro("Erro de conexao ao salvar a turma.");
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
     <ModalPortal>
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 900 }}>
+      <div className="modal-box turma-modal-box" style={{ maxWidth: 900 }}>
         <div className="modal-header">
           <div>
             <div className="modal-title">{isEdit ? "Editar turma completa" : "Nova turma completa"}</div>
@@ -285,7 +299,7 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
               <input className="form-input" placeholder="Ex: Unit 3 / pagina 24" value={form.ultima_licao} onChange={(e) => update("ultima_licao", e.target.value)} />
             </div>
             <div className="form-group form-group-span2">
-              <label className="form-label">Dias das aulas *</label>
+              <label className="form-label">Dias das aulas</label>
               <div className="attendance-grid">
                 {DIAS.map((dia) => (
                   <label className="attendance-item" key={dia}><input type="checkbox" checked={form.dias_semana.includes(dia)} onChange={() => toggleDia(dia)} /> {dia}</label>
@@ -371,10 +385,10 @@ function TurmaModal({ turma, onClose, onSaved }: { turma?: TurmaData; onClose: (
           {erro && <div className="form-error">{erro}</div>}
         </div>
 
-        <div className="modal-footer">
-          {isEdit && <button className="btn btn-danger btn-sm" onClick={excluir} disabled={saving} style={{ marginRight: "auto" }}>Excluir</button>}
+        <div className="modal-footer turma-modal-footer">
+          {isEdit && <button className="btn btn-danger" onClick={excluir} disabled={saving} style={{ marginRight: "auto" }}>Excluir turma</button>}
           <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : isEdit ? "Salvar alteracoes" : "Criar turma"}</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={saving}>{saving ? "Salvando..." : isEdit ? "Salvar turma" : "Criar turma"}</button>
         </div>
       </div>
     </div>
@@ -401,7 +415,7 @@ export function EditarTurmaBtn({ turma }: { turma: TurmaData }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>Editar</button>
+      <button className="btn btn-secondary" style={{ width: "100%" }} onClick={() => setOpen(true)}>Editar turma e alunos</button>
       {open && <TurmaModal turma={turma} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); router.refresh(); }} />}
     </>
   );

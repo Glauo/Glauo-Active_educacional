@@ -2466,6 +2466,34 @@
   .topbar-user-name { display: none; }
 }
 
+.turma-modal-footer {
+  background: var(--surface-raised);
+  flex-wrap: wrap;
+}
+
+.turma-modal-footer .btn-primary {
+  min-width: 150px;
+}
+
+@media (max-width: 640px) {
+  .turma-modal-box {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .turma-modal-footer {
+    padding: 12px;
+  }
+
+  .turma-modal-footer .btn {
+    flex: 1 1 130px;
+  }
+
+  .turma-modal-footer .btn-danger {
+    margin-right: 0 !important;
+    order: 3;
+  }
+}
+
 @media (max-width: 640px) {
   .page-content { padding: 14px 14px 32px; gap: 16px; }
   .metric-grid-4, .metric-grid-3 { grid-template-columns: 1fr 1fr; }

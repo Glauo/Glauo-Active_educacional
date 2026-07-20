@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbList, dbSet, dbUpdate } from "@/lib/db";
+import { dbSet, dbUpdate } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isAdminOrCoordinator } from "@/lib/roles";
 import { getSchoolClasses } from "@/lib/school-data";
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { aluno_ids, ...classData } = body;
-    const turmas = await dbList<Record<string, unknown>>(KEY);
+    const turmas = await getSchoolClasses() as Record<string, unknown>[];
     const nome = text(classData.nome);
     if (!nome) return NextResponse.json({ error: "Nome da turma e obrigatorio." }, { status: 400 });
     const exists = turmas.some((t) => text(t.nome).toLowerCase() === nome.toLowerCase());
@@ -77,9 +77,9 @@ export async function PUT(req: NextRequest) {
     const { id, aluno_ids, ...updates } = await req.json();
     if (!id) return NextResponse.json({ error: "ID obrigatorio." }, { status: 400 });
 
-    const turmas = await dbList<Record<string, unknown>>(KEY);
+    const turmas = await getSchoolClasses() as Record<string, unknown>[];
     const idx = turmas.findIndex((t) => t.id === id || t.nome === id);
-    if (idx === -1) return NextResponse.json({ error: "Turma nao encontrada." }, { status: 404 });
+    if (idx === -1) return NextResponse.json({ error: "Turma nao encontrada. Atualize a pagina e tente novamente." }, { status: 404 });
 
     const oldNome = text(turmas[idx].nome);
     const modulo = migrateModule(updates.modulo || updates.tipo_aula || updates.modalidade || turmas[idx].modulo);
@@ -90,16 +90,12 @@ export async function PUT(req: NextRequest) {
     if (Array.isArray(aluno_ids)) {
       await syncClassStudents(oldNome, newNome, aluno_ids);
     } else if (oldNome && newNome && oldNome !== newNome) {
-      const alunos = await dbList<Record<string, unknown>>("students.json");
-      let changed = false;
-      for (const aluno of alunos) {
-        if (text(aluno.turma) === oldNome || text(aluno.classe) === oldNome) {
-          aluno.turma = newNome;
-          aluno.classe = newNome;
-          changed = true;
-        }
-      }
-      if (changed) await dbSet("students.json", alunos);
+      await dbUpdate<Record<string, unknown>[]>("students.json", (current) =>
+        (Array.isArray(current) ? current : []).map((aluno) =>
+          text(aluno.turma || aluno.classe) === oldNome
+            ? { ...aluno, turma: newNome, classe: newNome, updated_at: new Date().toISOString() }
+            : aluno
+        ), []);
     }
     return NextResponse.json({ ok: true, turma: turmas[idx] });
   } catch (err) {
@@ -115,25 +111,13 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
-  const turmas = await dbList<Record<string, unknown>>(KEY);
+  const turmas = await getSchoolClasses() as Record<string, unknown>[];
   const target = turmas.find((t) => t.id === id || t.nome === id);
+  if (!target) return NextResponse.json({ error: "Turma nao encontrada. Atualize a pagina e tente novamente." }, { status: 404 });
   const targetName = text(target?.nome);
   const filtered = turmas.filter((t) => t.id !== id && t.nome !== id);
 
-  const writes: Promise<boolean>[] = [dbSet(KEY, filtered)];
-  if (targetName) {
-    const alunos = await dbList<Record<string, unknown>>("students.json");
-    let changed = false;
-    for (const aluno of alunos) {
-      if (text(aluno.turma) === targetName || text(aluno.classe) === targetName) {
-        aluno.turma = "Sem Turma";
-        if (aluno.classe) aluno.classe = "Sem Turma";
-        changed = true;
-      }
-    }
-    if (changed) writes.push(dbSet("students.json", alunos));
-  }
-
-  await Promise.all(writes);
+  await dbSet(KEY, filtered);
+  if (targetName) await syncClassStudents(targetName, "", []);
   return NextResponse.json({ ok: true });
 }
