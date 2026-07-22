@@ -290,70 +290,35 @@ function boletoErrorMessage(data: Record<string, unknown>) {
   ].filter(Boolean).join("\n");
 }
 
-function BoletoWhatsAppButton({ lancamento }: { lancamento: Lancamento }) {
+function DocumentoWhatsAppButton({ lancamento, documento }: { lancamento: Lancamento; documento: "boleto" | "pix" }) {
   const [sending, setSending] = useState(false);
-  const [currentLancamento, setCurrentLancamento] = useState<Lancamento>(lancamento);
-  const phone = financePhone(currentLancamento);
+  const id = String(lancamento.id || "");
 
   async function send() {
-    if (sending) return;
+    if (!id || sending) return;
     setSending(true);
     try {
-      let current: Lancamento = currentLancamento;
-      let currentPhone = financePhone(current);
-      if (!String(current.mercado_pago_ticket_url || current.boleto_pdf_url || current.boleto_pdf_b64 || "").trim() || !currentPhone) {
-        const hasMercadoPagoHistory = Boolean(String(
-          current.mercado_pago_payment_id ||
-          current.mp_payment_id ||
-          current.mercado_pago_ticket_url ||
-          current.boleto_url ||
-          current.boleto_codigo ||
-          ""
-        ).trim());
-        const res = await fetch(hasMercadoPagoHistory ? "/api/financeiro/regerar-boleto" : "/api/financeiro", {
-          method: hasMercadoPagoHistory ? "POST" : "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(hasMercadoPagoHistory ? { id: current.id } : { id: current.id, tipo: "recebimentos", gerar_boleto: true })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-          alert(boletoErrorMessage(data));
-          return;
-        }
-        current = ((data.resultados && Array.isArray(data.resultados) && data.resultados[0]?.boleto_url)
-          ? { ...current, mercado_pago_ticket_url: data.resultados[0].boleto_url, boleto_url: data.resultados[0].boleto_url, boleto_pdf_url: data.resultados[0].boleto_url }
-          : (data.lancamento || current)) as Lancamento;
-        setCurrentLancamento(current);
-        currentPhone = financePhone(current);
-      }
-      if (!currentPhone) {
-        alert("WhatsApp nao encontrado no lancamento nem no cadastro do aluno.");
-        return;
-      }
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const link = boletoLink(current);
-      const message = financeMessage({ ...current, mercado_pago_ticket_url: link }, origin).body;
-      const sendRes = await fetch("/api/whatsapp/send", {
+      const sendRes = await fetch("/api/financeiro/send-doc", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telefone: currentPhone, mensagem: message }),
+        body: JSON.stringify({ canal: "whatsapp", lancamento_id: id, documento }),
       });
       const sendData = await sendRes.json().catch(() => ({}));
       if (!sendRes.ok || !sendData.ok) {
-        alert(`WhatsApp nao enviado automaticamente: ${String(sendData.status || sendData.error || "verifique a WAPI")}`);
+        alert(`WhatsApp nao enviado: ${String(sendData.results?.whatsapp || sendData.error || "verifique a WAPI")}`);
         return;
       }
-      alert("Boleto enviado por WhatsApp.");
+      alert(`${documento === "pix" ? "PIX" : "Boleto"} enviado por WhatsApp.`);
     } catch {
-      alert("Erro ao enviar boleto por WhatsApp.");
+      alert("Erro ao enviar documento por WhatsApp.");
     } finally {
       setSending(false);
     }
   }
 
   return (
-    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={sending} title={!phone ? "Busca o WhatsApp no cadastro do aluno antes de enviar" : ""}>
-      {sending ? "Enviando..." : "Cobrar"}
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!id || sending}>
+      {sending ? "Enviando..." : documento === "pix" ? "WhatsApp Pix" : "WhatsApp boleto"}
     </button>
   );
 }
@@ -1078,7 +1043,8 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                               <BaixaBtn lancamento={r} tipo="recebimentos" />
                               {!pago && <BoletoBtn lancamento={r} />}
                               {!pago && <PixBtn lancamento={r} />}
-                              {!pago && <BoletoWhatsAppButton lancamento={r} />}
+                              {!pago && <DocumentoWhatsAppButton lancamento={r} documento="boleto" />}
+                              {!pago && <DocumentoWhatsAppButton lancamento={r} documento="pix" />}
                               {!pago && <VerificarPagamentoBtn lancamento={r} />}
                               <ReciboBtn lancamento={r} />
                               <EstornoBtn lancamento={r} tipo="recebimentos" canReverse={canReversePayments} />

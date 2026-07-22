@@ -64,19 +64,24 @@ function introFor(category: string) {
   return intros[category] || intros.outros;
 }
 
-export function financeMessage(row: Record<string, unknown>, origin = "") {
+export function financeMessage(row: Record<string, unknown>, origin = "", paymentType: "boleto" | "pix" = "boleto") {
   const id = text(row.id);
   const pdfUrl = text(row.boleto_pdf_url || row.boleto_pdf_public_url);
   const boletoUrl = text(row.mercado_pago_ticket_url || row.boleto_url);
+  const pixUrl = text(row.pix_ticket_url);
+  const pixCode = text(row.pix_qr_code);
   const digitableLine = text(row.digitable_line || row.boleto_linha_digitavel);
   const barcode = text(row.boleto_codigo);
-  const link = isMercadoPagoLink(boletoUrl)
+  const boletoLink = isMercadoPagoLink(boletoUrl)
     ? boletoUrl
     : id
       ? `${origin}/api/financeiro/boleto?id=${encodeURIComponent(id)}`
       : pdfUrl
       ? (pdfUrl.startsWith("http") ? pdfUrl : `${origin}${pdfUrl}`)
       : origin;
+  const link = paymentType === "pix"
+    ? (pixUrl || (id ? `${origin}/api/financeiro/pix?id=${encodeURIComponent(id)}` : origin))
+    : boletoLink;
   const category = financeCategory(row);
   const title = categoryTitle(category);
   const aluno = text(row.aluno || row.nome || "Aluno");
@@ -95,6 +100,8 @@ export function financeMessage(row: Record<string, unknown>, origin = "") {
     `Valor: ${money(row.valor_parcela || row.valor || row.valor_total)}`,
     vencimento ? `Vencimento: ${vencimento}` : "",
     status ? `Status: ${status}` : "",
+    paymentType === "pix" ? "Pagamento via PIX:" : "",
+    paymentType === "pix" && pixCode ? `PIX copia e cola: ${pixCode}` : "",
     digitableLine ? "Linha digitável:" : "",
     digitableLine,
     !digitableLine && barcode ? `Código de barras: ${barcode}` : "",

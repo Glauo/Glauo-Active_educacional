@@ -158,6 +158,7 @@ function SendDocButton({
 }) {
   const [sending, setSending] = useState(false);
   const target = canal === "whatsapp" ? phoneOf(row) : emailOf(row);
+  const lancamentoId = text(row.id);
 
   async function send() {
     if (!target || sending) return;
@@ -172,6 +173,7 @@ function SendDocButton({
           email: canal === "email" ? target : "",
           assunto: message.subject,
           mensagem: message.body,
+          lancamento_id: lancamentoId,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -184,7 +186,7 @@ function SendDocButton({
   }
 
   return (
-    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={!target || sending} title={!target ? `Sem ${canal === "whatsapp" ? "telefone" : "e-mail"} cadastrado` : ""}>
+    <button className="btn btn-secondary btn-sm" type="button" onClick={send} disabled={(!target && !lancamentoId) || sending} title={!target ? "Busca o contato no cadastro do aluno antes de enviar" : ""}>
       {sending ? "Enviando..." : canal === "whatsapp" ? "WhatsApp" : "E-mail"}
     </button>
   );
@@ -215,7 +217,7 @@ function CobrancaModal({
     if (sendingAll) return;
     const eligible = rows
       .map((row, index) => ({ row, id: text(row.id) || `${mode}_${index}`, phone: phoneOf(row), message: smartFinanceMessage(row, mode) }))
-      .filter((item) => item.phone);
+      .filter((item) => item.phone || text(item.row.id));
 
     if (eligible.length === 0) {
       setBulkResult("Nenhum lancamento desta fila tem WhatsApp cadastrado.");
@@ -240,6 +242,7 @@ function CobrancaModal({
             telefone: item.phone,
             assunto: item.message.subject,
             mensagem: item.message.body,
+            lancamento_id: text(item.row.id),
           }),
         });
         const data = await res.json().catch(() => ({}));
