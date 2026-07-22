@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbList, dbSet } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { notifyStudentsAboutLaunch } from "@/lib/student-launch-notifications";
-import { normalizeList, text } from "@/lib/school-modules";
+import { canManageSchoolContent, normalizeList, text } from "@/lib/school-modules";
+import { resolveBookContentTarget } from "@/lib/book-content-targeting";
 
 type QuestaoDesafio = {
   id?: string;
@@ -56,17 +57,25 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!session || !canManageSchoolContent(session)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json() as Desafio;
   const [desafios, students] = await Promise.all([dbList<Desafio>("challenges.json"), dbList<Record<string, unknown>>("students.json")]);
+  let target;
+  try {
+    target = await resolveBookContentTarget(body);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Destinatário inválido." }, { status: 400 });
+  }
   const questions = normalizeQuestions(body.questions);
   const novo: Desafio = {
     ...body,
     id: body.id || `d_${Date.now()}`,
-    turma: text(body.turma || "Todas") || "Todas",
-    turmas: normalizeList(body.turmas),
-    aluno: text(body.aluno),
-    alunos: normalizeList(body.alunos),
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
+    livro: target.livro,
+    licao: text(body.licao || body.capitulo || target.referencia),
     ...(questions ? { questions, pontos: questionsTotal(questions) || Number(body.pontos) || 0 } : {}),
     status: body.status || "Publicado",
   };
@@ -89,20 +98,28 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!session || !canManageSchoolContent(session)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const body = await req.json() as Desafio;
   if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
   const desafios = await dbList<Desafio>("challenges.json");
   const idx = desafios.findIndex((d) => d.id === body.id);
   const questions = body.questions === undefined ? undefined : normalizeQuestions(body.questions);
   if (idx === -1) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
+  let target;
+  try {
+    target = await resolveBookContentTarget({ ...desafios[idx], ...body });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Destinatário inválido." }, { status: 400 });
+  }
   desafios[idx] = {
     ...desafios[idx],
     ...body,
-    turma: text(body.turma || desafios[idx].turma || "Todas") || "Todas",
-    turmas: body.turmas === undefined ? desafios[idx].turmas : normalizeList(body.turmas),
-    aluno: body.aluno === undefined ? desafios[idx].aluno : text(body.aluno),
-    alunos: body.alunos === undefined ? desafios[idx].alunos : normalizeList(body.alunos),
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
+    livro: target.livro,
+    licao: text(body.licao || body.capitulo || desafios[idx].licao || target.referencia),
     ...(questions ? { questions, pontos: questionsTotal(questions) || Number(body.pontos) || Number(desafios[idx].pontos) || 0 } : {}),
   };
   await dbSet("challenges.json", desafios);
@@ -111,7 +128,7 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!session || !canManageSchoolContent(session)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });

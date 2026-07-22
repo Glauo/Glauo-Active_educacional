@@ -16,6 +16,7 @@ import {
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { notifyStudentsAboutLaunch } from "@/lib/student-launch-notifications";
+import { resolveBookContentTarget } from "@/lib/book-content-targeting";
 
 type Row = Record<string, unknown>;
 type WizSession = NonNullable<Awaited<ReturnType<typeof getSession>>>;
@@ -375,19 +376,25 @@ async function sendBulkMessage(data: Row, actor: string, session: WizSession) {
 }
 
 async function createHomework(data: Row, actor: string, session?: WizSession) {
+  let target;
+  try {
+    target = await resolveBookContentTarget(data);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Nao foi possivel identificar o nivel da atividade." };
+  }
   const titulo = text(data.titulo || "Tarefa criada pelo Wiz");
   const disciplina = text(data.disciplina || "Ingles");
-  const turma = text(data.turma || "Todas") || "Todas";
+  const turma = target.turma || target.aluno;
   const quantidade = Math.max(1, Math.min(15, Number(data.quantidade_questoes || data.quantidade || 5) || 5));
-  const foco = text(data.foco || data.conteudo || data.capitulo || "conteudo estudado");
+  const foco = target.referencia;
   const questions = Array.from({ length: quantidade }).map((_, index) => ({
     id: crypto.randomUUID(),
     tipo: index % 3 === 0 ? "multipla_escolha" : index % 3 === 1 ? "verdadeiro_falso" : "aberta",
     enunciado: index % 3 === 0
-      ? `Sobre ${foco}, escolha a alternativa correta. Questao ${index + 1}.`
+      ? `No ${target.livro}, sobre ${foco}, escolha a alternativa correta. Questao ${index + 1}.`
       : index % 3 === 1
-        ? `Verdadeiro ou falso: ${foco} pode ser aplicado em uma situacao real de comunicacao.`
-        : `Explique com suas palavras: ${foco}.`,
+        ? `No ${target.livro}, verdadeiro ou falso: ${foco} pode ser aplicado em uma situacao real de comunicacao.`
+        : `Com base no ${target.livro}, explique com suas palavras: ${foco}.`,
     opcoes: index % 3 === 0 ? ["Alternativa correta", "Distrator comum", "Resposta incompleta", "Fora do contexto"] : [],
     correta_idx: index % 3 === 0 ? 0 : null,
     correta_texto: index % 3 === 1 ? "V" : "",
@@ -398,13 +405,14 @@ async function createHomework(data: Row, actor: string, session?: WizSession) {
     id: crypto.randomUUID(),
     tipo: "Licao de Casa",
     titulo,
-    descricao: text(data.descricao || data.instrucoes || `Atividade objetiva sobre ${foco}.`),
+    descricao: text(data.descricao || data.instrucoes || `Atividade do ${target.livro} sobre ${foco}.`),
     disciplina,
-    turma,
-    turmas: normalizeList(data.turmas),
-    aluno: text(data.aluno),
-    livro: text(data.livro),
-    capitulo: text(data.capitulo),
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
+    livro: target.livro,
+    capitulo: foco,
     habilidade: foco,
     due_date: text(data.due_date || data.prazo),
     peso: Number(data.peso) || questions.reduce((sum, q) => sum + q.pontos, 0),
@@ -428,12 +436,23 @@ async function createHomework(data: Row, actor: string, session?: WizSession) {
 }
 
 async function createWork(data: Row, actor: string, session?: WizSession) {
+  let target;
+  try {
+    target = await resolveBookContentTarget(data);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Nao foi possivel identificar o nivel da atividade." };
+  }
   const item = {
     id: `d_${Date.now()}`,
     titulo: text(data.titulo || "Trabalho criado pelo Wiz"),
-    descricao: text(data.descricao || data.instrucoes || "Trabalho avaliativo com criterios de entrega."),
-    turma: text(data.turma || "Todas"),
+    descricao: text(data.descricao || data.instrucoes || `Trabalho avaliativo do ${target.livro} sobre ${target.referencia}.`),
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
     disciplina: text(data.disciplina || "Ingles"),
+    livro: target.livro,
+    licao: target.referencia,
     prazo: text(data.prazo || data.due_date),
     pontos: Number(data.pontos || data.peso || 10),
     criterios: text(data.criterios || "Organizacao, conteudo, entrega e apresentacao."),

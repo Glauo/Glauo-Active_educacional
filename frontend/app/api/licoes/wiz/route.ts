@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { canManageSchoolContent, text, type HomeworkQuestion } from "@/lib/school-modules";
+import { resolveBookContentTarget } from "@/lib/book-content-targeting";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -8,9 +9,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   }
   const body = (await req.json()) as Record<string, unknown>;
+  let target;
+  try {
+    target = await resolveBookContentTarget(body);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Destinatario invalido." }, { status: 400 });
+  }
   const disciplina = text(body.disciplina || "Disciplina");
-  const turma = text(body.turma || "Turma");
-  const capitulo = text(body.capitulo || body.habilidade || "conteudo atual");
+  const turma = target.turma || target.aluno;
+  const capitulo = target.referencia;
   const dificuldade = text(body.dificuldade || "Medio");
   const count = Math.max(1, Math.min(15, Number(body.quantidade) || 5));
   const foco = text(body.foco || "fixacao do conteudo");
@@ -21,7 +28,7 @@ export async function POST(req: NextRequest) {
       return {
         id: crypto.randomUUID(),
         tipo: "multipla_escolha",
-        enunciado: `(${disciplina}) Sobre ${capitulo}, escolha a alternativa mais adequada para ${foco}. Questao ${n}.`,
+        enunciado: `(${target.livro} - ${disciplina}) Sobre ${capitulo}, escolha a alternativa mais adequada para ${foco}. Questao ${n}.`,
         opcoes: [
           `Aplicacao correta do conteudo em ${turma}`,
           "Resposta parcialmente relacionada, mas incompleta",
@@ -36,7 +43,7 @@ export async function POST(req: NextRequest) {
       return {
         id: crypto.randomUUID(),
         tipo: "verdadeiro_falso",
-        enunciado: `A afirmacao a seguir esta alinhada ao conteudo ${capitulo} em nivel ${dificuldade}: o aluno consegue explicar o conceito com exemplo proprio.`,
+        enunciado: `No ${target.livro}, a afirmacao a seguir esta alinhada ao conteudo ${capitulo} em nivel ${dificuldade}: o aluno consegue explicar o conceito com exemplo proprio.`,
         pontos: 1,
         feedback: "Ajuste a afirmacao conforme o livro/apostila antes de publicar.",
       };
@@ -51,8 +58,9 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({
-    titulo: `Licao de Casa - ${disciplina}: ${capitulo}`,
-    descricao: `Atividade gerada pela Prof Wiz para ${turma}. Revise todas as questoes antes de publicar.`,
+    titulo: `Licao de Casa - ${target.livro}: ${capitulo}`,
+    descricao: `Atividade gerada pela Prof Wiz para ${turma}, baseada no ${target.livro}. Revise todas as questoes antes de publicar.`,
+    livro: target.livro,
     questions,
   });
 }

@@ -437,6 +437,10 @@ export function HomeworkCreateButton({ turmas, alunos }: { turmas: Row[]; alunos
   }
 
   async function gerarWiz() {
+    if (!text(form.capitulo || form.aula_referencia || form.habilidade || form.foco)) {
+      setErro("Informe a unidade, capitulo, licao ou topico do livro antes de gerar com Prof Wiz.");
+      return;
+    }
     setSaving(true);
     const res = await fetch("/api/licoes/wiz", {
       method: "POST",
@@ -456,6 +460,10 @@ export function HomeworkCreateButton({ turmas, alunos }: { turmas: Row[]; alunos
   async function salvar(status: "Ativa" | "Rascunho") {
     if (!form.titulo.trim()) {
       setErro("Titulo da licao e obrigatorio.");
+      return;
+    }
+    if (!text(form.capitulo || form.aula_referencia || form.habilidade || form.foco)) {
+      setErro("Informe a unidade, capitulo, licao ou topico estudado no livro.");
       return;
     }
     setSaving(true);
@@ -522,11 +530,11 @@ export function HomeworkCreateButton({ turmas, alunos }: { turmas: Row[]; alunos
                       </label>
                     ))}
                   </div>
-                  <div className="form-help">Marque outras turmas quando a mesma licao deve ser publicada para mais de uma turma.</div>
+                  <div className="form-help">Use apenas turmas que estejam no mesmo livro. O sistema bloqueia niveis diferentes.</div>
                 </div>
                 <div className="form-group"><label className="form-label">Prazo</label><input className="form-input" type="datetime-local" value={form.due_date} onChange={(e) => update("due_date", e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Livro / apostila</label><input className="form-input" value={form.livro} onChange={(e) => update("livro", e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Capitulo / unidade</label><input className="form-input" value={form.capitulo} onChange={(e) => update("capitulo", e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Livro</label><input className="form-input" value={form.livro} onChange={(e) => update("livro", e.target.value)} placeholder="Definido pela turma/aluno" /><div className="form-help">O nivel sera conferido pelo cadastro da turma ou aluno.</div></div>
+                <div className="form-group"><label className="form-label">Capitulo / unidade *</label><input className="form-input" value={form.capitulo} onChange={(e) => update("capitulo", e.target.value)} /></div>
                 <div className="form-group"><label className="form-label">Aula de referencia</label><input className="form-input" value={form.aula_referencia} onChange={(e) => update("aula_referencia", e.target.value)} /></div>
                 <div className="form-group"><label className="form-label">Habilidade / topico</label><input className="form-input" value={form.habilidade} onChange={(e) => update("habilidade", e.target.value)} /></div>
                 <div className="form-group"><label className="form-label">Peso</label><input className="form-input" type="number" value={form.peso} onChange={(e) => update("peso", e.target.value)} /></div>
@@ -545,7 +553,7 @@ export function HomeworkCreateButton({ turmas, alunos }: { turmas: Row[]; alunos
                   <div className="form-grid">
                     <div className="form-group"><label className="form-label">Questoes</label><input className="form-input" type="number" value={form.quantidade} onChange={(e) => update("quantidade", e.target.value)} /></div>
                     <div className="form-group"><label className="form-label">Dificuldade</label><select className="form-input" value={form.dificuldade} onChange={(e) => update("dificuldade", e.target.value)}><option>Facil</option><option>Medio</option><option>Dificil</option><option>Adaptativo</option></select></div>
-                    <div className="form-group form-group-span2"><label className="form-label">Foco especifico</label><input className="form-input" value={form.foco} onChange={(e) => update("foco", e.target.value)} /></div>
+                    <div className="form-group form-group-span2"><label className="form-label">Foco especifico</label><input className="form-input" value={form.foco} onChange={(e) => update("foco", e.target.value)} /><div className="form-help">Prof Wiz usa somente o livro e a referencia informados acima.</div></div>
                   </div>
                 </div>
               </div>

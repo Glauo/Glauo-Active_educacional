@@ -31,7 +31,7 @@ const QUICK_ACTIONS = [
   {
     label: "Tarefa",
     icon: "📋",
-    template: "Criar tarefa de inglês para turma [Nome da Turma], conteúdo: [Conteúdo], 5 questões",
+    template: "Criar tarefa para turma [Nome da Turma], unidade/licao [Referencia do Livro], conteudo [Topico], 5 questoes",
   },
   {
     label: "Material PDF",
@@ -162,7 +162,7 @@ export function WizAssistantClient({
       role: "wiz",
       text: isCommercial
         ? `Ola! Sou o Wiz IA Comercial do Active Educacional.\n\nPosso cadastrar leads, agendar retornos, preparar mensagem de prospeccao de matricula Mister Wiz, cadastrar alunos e lancar cobrancas.\n\nUse os atalhos abaixo ou descreva a acao comercial que precisa executar.`
-        : `Ola! Sou o Wiz, assistente operacional do Active Educacional.\n\nPosso registrar aulas de professores, cadastrar alunos, criar tarefas, lancar cobrancas, enviar comunicados e muito mais.\n\nUse os atalhos abaixo ou descreva o que precisa fazer.`,
+        : `Ola! Sou o Wiz, assistente operacional do Active Educacional.\n\nPosso registrar aulas de professores, cadastrar alunos, criar tarefas, lancar cobrancas, enviar comunicados e muito mais.\n\nPara tarefas, trabalhos e desafios, informe a turma ou aluno e a unidade/licao do livro. Eu uso somente o nivel cadastrado.`,
       ts: now(),
     },
   ]);

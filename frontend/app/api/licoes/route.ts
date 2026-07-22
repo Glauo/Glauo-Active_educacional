@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { canManageSchoolContent, homeworkTotal, normalizeList, nowIso, text, type Homework, type HomeworkQuestion } from "@/lib/school-modules";
 import { notifyStudentsAboutLaunch } from "@/lib/student-launch-notifications";
+import { resolveBookContentTarget } from "@/lib/book-content-targeting";
 
 const KEY = "activities.json";
 
@@ -43,6 +44,12 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as Homework;
   const titulo = text(body.titulo);
   if (!titulo) return NextResponse.json({ error: "Titulo da licao e obrigatorio." }, { status: 400 });
+  let target;
+  try {
+    target = await resolveBookContentTarget(body);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Destinatario invalido." }, { status: 400 });
+  }
   const questions = normalizeQuestions(body);
   const item: Homework = {
     ...body,
@@ -51,12 +58,12 @@ export async function POST(req: NextRequest) {
     titulo,
     descricao: text(body.descricao || body.instrucoes),
     disciplina: text(body.disciplina || "Geral"),
-    turma: text(body.turma || "Todas") || "Todas",
-    turmas: normalizeList(body.turmas),
-    aluno: text(body.aluno),
-    alunos: normalizeList(body.alunos),
-    livro: text(body.livro),
-    capitulo: text(body.capitulo),
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
+    livro: target.livro,
+    capitulo: text(body.capitulo || target.referencia),
     aula_referencia: text(body.aula_referencia),
     habilidade: text(body.habilidade),
     due_date: text(body.due_date),
@@ -96,9 +103,21 @@ export async function PUT(req: NextRequest) {
   const activities = await dbList<Homework>(KEY);
   const idx = activities.findIndex((item) => text(item.id) === id);
   if (idx === -1) return NextResponse.json({ error: "Nao encontrado" }, { status: 404 });
+  let target;
+  try {
+    target = await resolveBookContentTarget({ ...activities[idx], ...body });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Destinatario invalido." }, { status: 400 });
+  }
   activities[idx] = {
     ...activities[idx],
     ...body,
+    turma: target.turma,
+    turmas: target.turmas,
+    aluno: target.aluno,
+    alunos: target.alunos,
+    livro: target.livro,
+    capitulo: text(body.capitulo || activities[idx].capitulo || target.referencia),
     questions: body.questions ? normalizeQuestions(body) : activities[idx].questions,
     updated_at: nowIso(),
   };

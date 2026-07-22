@@ -270,6 +270,10 @@ function DesafioModal({
       setErro("O titulo e obrigatorio.");
       return;
     }
+    if (!form.licao.trim()) {
+      setErro("Informe a licao, unidade ou referencia do livro.");
+      return;
+    }
     if (questions.some((question) => !text(question.enunciado))) {
       setErro("Preencha o enunciado de todas as questoes.");
       return;
@@ -336,8 +340,8 @@ function DesafioModal({
               <label className="form-label">Titulo do desafio *</label>
               <input className="form-input" placeholder="Ex: Revise a licao e responda" value={form.titulo} onChange={(event) => update("titulo", event.target.value)} autoFocus />
             </div>
-            <div className="form-group"><label className="form-label">Livro</label><input className="form-input" placeholder="Livro da turma" value={form.livro} onChange={(event) => update("livro", event.target.value)} /></div>
-            <div className="form-group"><label className="form-label">Licao / referencia</label><input className="form-input" placeholder="Ex: Unidade 4 - pagina 36" value={form.licao} onChange={(event) => update("licao", event.target.value)} /></div>
+            <div className="form-group"><label className="form-label">Livro</label><input className="form-input" placeholder="Definido pela turma/aluno" value={form.livro} onChange={(event) => update("livro", event.target.value)} /><div className="form-help">O sistema confere o livro do destinatario antes de publicar.</div></div>
+            <div className="form-group"><label className="form-label">Licao / referencia *</label><input className="form-input" placeholder="Ex: Unidade 4 - pagina 36" value={form.licao} onChange={(event) => update("licao", event.target.value)} /></div>
             <div className="form-group form-group-span2"><label className="form-label">Instrucoes gerais</label><textarea className="form-input form-textarea" rows={3} placeholder="Explique o objetivo e o que o aluno deve entregar." value={form.descricao} onChange={(event) => update("descricao", event.target.value)} /></div>
           </div>
 
@@ -347,7 +351,7 @@ function DesafioModal({
                 <div className="section-eyebrow">Envio</div>
                 <h3 className="section-title">Turmas e alunos</h3>
               </div>
-              <span className="badge badge-info">{form.alunos.length ? `${form.alunos.length} aluno(s)` : form.turmas.length ? `${form.turmas.length} turma(s)` : "Todas as turmas"}</span>
+              <span className="badge badge-info">{form.alunos.length ? `${form.alunos.length} aluno(s)` : form.turmas.length ? `${form.turmas.length} turma(s)` : "Selecione destinatarios"}</span>
             </div>
             <div className="card-body">
               <div className="form-grid">
@@ -361,7 +365,7 @@ function DesafioModal({
                       </label>
                     )) : <div className="form-help">Nenhuma turma cadastrada disponivel.</div>}
                   </div>
-                  <div className="form-help">Sem turma marcada, o desafio fica disponivel para todas as turmas.</div>
+                  <div className="form-help">Selecione turmas do mesmo livro. Para niveis diferentes, crie desafios separados.</div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Alunos cadastrados</label>
