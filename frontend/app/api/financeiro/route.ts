@@ -112,9 +112,7 @@ async function audit(entry: Record<string, unknown>) {
 }
 
 function shouldSendWhatsApp(data: Record<string, unknown>) {
-  return data.enviar_whatsapp === true ||
-    text(data.enviar_whatsapp).toLowerCase() === "true" ||
-    text((data.notification_status as Record<string, unknown> | undefined)?.whatsapp) === "link_gerado";
+  return data.enviar_whatsapp === true || text(data.enviar_whatsapp).toLowerCase() === "true";
 }
 
 function phoneOf(data: Record<string, unknown>) {
@@ -148,9 +146,19 @@ function runNotification(task: Promise<unknown>, label: string) {
 }
 
 function shouldSendEmail(data: Record<string, unknown>) {
-  return data.enviar_email === true ||
-    text(data.enviar_email).toLowerCase() === "true" ||
-    text((data.notification_status as Record<string, unknown> | undefined)?.email) === "link_gerado";
+  return data.enviar_email === true || text(data.enviar_email).toLowerCase() === "true";
+}
+
+function canSendFinancialChargeEmail(data: Record<string, unknown>) {
+  const status = lower(data.status || data.situacao);
+  const valor = moneyValue(data.valor_parcela ?? data.valor ?? data.valor_total);
+  const aluno = text(data.aluno || data.nome || data.aluno_id || data.aluno_login);
+  return Boolean(aluno && valor > 0) &&
+    !status.includes("pago") &&
+    !status.includes("baixado") &&
+    !status.includes("liquidado") &&
+    !status.includes("cancel") &&
+    !status.includes("estorn");
 }
 
 async function maybeGenerateMercadoPagoBoleto(
@@ -268,7 +276,7 @@ export async function POST(req: NextRequest) {
         , []);
       })(), "whatsapp");
     }
-    if (tipo !== "despesas" && shouldSendEmail(data)) {
+    if (tipo !== "despesas" && shouldSendEmail(data) && canSendFinancialChargeEmail(novo)) {
       runNotification((async () => {
         const message = financeMessage(novo, origin);
         const result = await sendEmail(emailOf(novo), message.subject, message.body, session);
@@ -410,7 +418,7 @@ export async function PUT(req: NextRequest) {
         }, []);
       })(), "whatsapp");
     }
-    if (tipo !== "despesas" && shouldSendEmail(updates)) {
+    if (tipo !== "despesas" && shouldSendEmail(updates) && canSendFinancialChargeEmail(nextLancamento)) {
       const lancamento = { ...nextLancamento };
       runNotification((async () => {
         const message = financeMessage(lancamento, origin);
