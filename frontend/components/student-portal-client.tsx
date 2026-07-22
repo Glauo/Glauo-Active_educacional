@@ -259,7 +259,7 @@ export function StudentPortalClient({ session, perfil, muralPosts, licoes, entre
     { id: "notas", label: "Notas" },
     { id: "licoes", label: "Tarefas", badge: pendentes },
     { id: "desafios", label: "Desafios", badge: desafiosPendentes },
-    { id: "biblioteca", label: "Biblioteca", badge: totalBiblioteca },
+    { id: "biblioteca", label: "Material", badge: totalBiblioteca },
     { id: "chat", label: "Chat" },
     { id: "wiz", label: "IA Wiz" },
   ];
@@ -372,7 +372,7 @@ export function StudentPortalClient({ session, perfil, muralPosts, licoes, entre
         {tab === "biblioteca" && (
           <section className="student-panel">
             <div className="student-section-head">
-              <div><span>Biblioteca</span><h2>Livros e materiais</h2></div>
+              <div><span>Material</span><h2>Livro do seu nivel</h2></div>
               <span className="badge badge-info">{totalBiblioteca} itens</span>
             </div>
 

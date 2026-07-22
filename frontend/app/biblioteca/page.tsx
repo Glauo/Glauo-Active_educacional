@@ -47,11 +47,11 @@ export default async function BibliotecaPage() {
   const categorias = [...new Set(livrosComWorkbooks.map((l) => String(l.categoria || l.tipo || l.nivel || "Geral")))];
 
   return (
-    <AppShell breadcrumb="Biblioteca" userName={session.pessoa || session.usuario} userRole={session.perfil}>
+    <AppShell breadcrumb="Material" userName={session.pessoa || session.usuario} userRole={session.perfil}>
       <div className="page-header">
         <div className="page-title-block">
           <div className="page-eyebrow"><span className="page-eyebrow-dot" />Recursos Pedagógicos</div>
-          <h1 className="page-title">Biblioteca</h1>
+          <h1 className="page-title">Material</h1>
           <p className="page-description">Livros didáticos, vídeos e materiais de apoio organizados por turma e nível.</p>
         </div>
       </div>

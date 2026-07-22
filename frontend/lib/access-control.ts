@@ -28,7 +28,7 @@ export const ACCESS_MODULES: AccessModule[] = [
   { key: "correcao_licoes", label: "Correcao de Licoes", path: "/correcao-licoes", roles: ["admin", "coord", "dire"] },
   { key: "desafios", label: "Desafios", path: "/desafios", roles: ["admin", "coord", "dire", "gestor", "prof"] },
   { key: "notas", label: "Notas", path: "/notas", roles: ["admin", "coord", "dire", "gestor", "prof"] },
-  { key: "biblioteca", label: "Biblioteca", path: "/biblioteca", roles: ["admin", "coord", "dire", "gestor", "prof"] },
+  { key: "biblioteca", label: "Material", path: "/biblioteca", roles: ["admin", "coord", "dire", "gestor", "prof"] },
   { key: "financeiro", label: "Financeiro", path: "/financeiro", roles: ["admin", "coord", "dire", "gestor", "comercial"] },
   { key: "comercial", label: "Comercial", path: "/comercial", roles: ["admin", "coord", "dire", "gestor", "comercial"] },
   { key: "atendimento", label: "Atendimento", path: "/atendimento", roles: ["admin", "coord", "dire", "gestor", "comercial"] },

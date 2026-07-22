@@ -5,6 +5,8 @@ import { StudentPortalClient } from "@/components/student-portal-client";
 import { isHomeworkActivity, normalizeList, studentMatchesTarget, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
 import { hasWorkbookStudentTarget, releasedWorkbookLessons, studentWorkbookBook, workbookLibraryBooks } from "@/lib/workbook-lessons";
 import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
+import { studentCanAccessLibraryItem } from "@/lib/library-access";
+import { getSchoolClasses } from "@/lib/school-data";
 
 type Aluno = { id?: string; nome?: string; name?: string; login?: string; turma?: string; classe?: string; livro?: string; book?: string; status?: string; [k: string]: unknown };
 type Desafio = { id?: string; titulo?: string; title?: string; turma?: string; pontos?: number | string; status?: string; [k: string]: unknown };
@@ -89,17 +91,6 @@ function normalizedTitle(value: unknown) {
     .trim();
 }
 
-function visibleLibraryItem(row: BibliotecaItem, session: NonNullable<Awaited<ReturnType<typeof getSession>>>, aluno: Aluno | undefined, workbookBook?: string) {
-  const status = lower(row.status || "ativo");
-  if (status.includes("rascunho") || status.includes("arquiv") || status.includes("inativ") || status.includes("cancel")) return false;
-  if (!studentMatchesTarget(row, session, aluno)) return false;
-
-  const itemBook = lower(row.livro || row.book || row.nivel || row.nivel_livro || row.categoria || row.tipo || row.titulo || row.title);
-  if (!workbookBook || !itemBook) return true;
-  if (!itemBook.includes("livro") && !itemBook.includes("book") && !/\b[123]\b/.test(itemBook)) return true;
-  return itemBook.includes(`livro ${workbookBook}`) || itemBook.includes(`book ${workbookBook}`) || new RegExp(`\\b${workbookBook}\\b`).test(itemBook);
-}
-
 export default async function AlunoHomePage() {
   const session = await getSession();
   if (!session) redirect("/aluno/login");
@@ -107,7 +98,7 @@ export default async function AlunoHomePage() {
 
   await reconcileMercadoPagoPendingReceivables({ limit: 1, minIntervalMs: 120_000, lockMs: 60_000 });
 
-  const [alunos, desafios, conclusoes, notas, frequencias, recebimentos, mensagens, atividades, entregas, agenda, livros, materiais, videos] = await Promise.all([
+  const [alunos, desafios, conclusoes, notas, frequencias, recebimentos, mensagens, atividades, entregas, agenda, livros, materiais, videos, turmas] = await Promise.all([
     dbListWithoutKeys<Aluno>("students.json", HEAVY_KEYS),
     dbList<Desafio>("challenges.json"),
     dbList<Conclusao>("challenge_completions.json"),
@@ -121,6 +112,7 @@ export default async function AlunoHomePage() {
     dbListWithoutKeys<BibliotecaItem>("books.json", HEAVY_KEYS),
     dbListWithoutKeys<BibliotecaItem>("materials.json", HEAVY_KEYS),
     dbList<BibliotecaItem>("videos.json"),
+    getSchoolClasses(),
   ]);
 
   const meuPerfil = alunos.find((a) => lower(a.login) === lower(session.usuario) || lower(a.nome || a.name) === lower(session.pessoa));
@@ -179,9 +171,9 @@ export default async function AlunoHomePage() {
     )),
   ];
   const minhaBiblioteca = {
-    livros: livrosComWorkbooks.filter((item) => visibleLibraryItem(item, session, meuPerfil, workbookBook)),
-    materiais: materiais.filter((item) => visibleLibraryItem(item, session, meuPerfil, workbookBook)),
-    videos: videos.filter((item) => visibleLibraryItem(item, session, meuPerfil, workbookBook)),
+    livros: livrosComWorkbooks.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
+    materiais: materiais.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
+    videos: videos.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
   };
 
   return (

@@ -34,9 +34,9 @@ const QUICK_ACTIONS = [
     template: "Criar tarefa de inglês para turma [Nome da Turma], conteúdo: [Conteúdo], 5 questões",
   },
   {
-    label: "Biblioteca PDF",
+    label: "Material PDF",
     icon: "PDF",
-    template: "Cadastrar material PDF na biblioteca: titulo [Nome do material], tipo material, turma Todas, link [URL do PDF]",
+    template: "Cadastrar material PDF: titulo [Nome do material], tipo material, turma Todas, link [URL do PDF]",
   },
 ];
 
@@ -197,12 +197,12 @@ export function WizAssistantClient({
   function onFileChange(file: File | null) {
     if (!file) return;
     if (file.type && file.type !== "application/pdf") {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "wiz", text: "Envie apenas arquivo PDF para a biblioteca.", ts: now() }]);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "wiz", text: "Envie apenas arquivo PDF para Material.", ts: now() }]);
       return;
     }
     setSelectedFile(file);
     if (!input.trim()) {
-      setInput(`Cadastrar material PDF na biblioteca: titulo ${file.name.replace(/\.pdf$/i, "")}, tipo material, turma Todas`);
+      setInput(`Cadastrar material PDF: titulo ${file.name.replace(/\.pdf$/i, "")}, tipo material, turma Todas`);
     }
   }
 
@@ -225,7 +225,7 @@ export function WizAssistantClient({
       setLoading(false);
     }
 
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", text: file ? `${prompt || "Cadastrar material PDF na biblioteca"}\n[Anexo: ${file.name}]` : prompt, ts: now() };
+    const userMsg: Message = { id: crypto.randomUUID(), role: "user", text: file ? `${prompt || "Cadastrar material PDF"}\n[Anexo: ${file.name}]` : prompt, ts: now() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setSelectedFile(null);

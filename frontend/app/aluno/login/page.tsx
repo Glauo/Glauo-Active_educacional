@@ -69,7 +69,7 @@ export default function AlunoLoginPage() {
           <div style={{ marginTop: "48px", display: "flex", flexDirection: "column", gap: "16px" }}>
             {[
               { icon: "⭐", label: "Desafios e pontuação" },
-              { icon: "📚", label: "Biblioteca e materiais" },
+              { icon: "📚", label: "Material didatico" },
               { icon: "📊", label: "Seu progresso e histórico" }
             ].map(({ icon, label }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "12px" }}>

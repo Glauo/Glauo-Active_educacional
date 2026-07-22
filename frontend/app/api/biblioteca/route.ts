@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { saveLibraryPdf, type LibraryPdfKey } from "@/lib/library-pdfs";
+import { studentCanAccessLibraryItem } from "@/lib/library-access";
+import { getSchoolClasses } from "@/lib/school-data";
+import { isAdminOrCoordinator, isTeacher } from "@/lib/roles";
 
 type Livro = { id?: string; titulo?: string; autor?: string; nivel?: string; turma?: string; url?: string; pdf_nome?: string; pdf_mime?: string; [k: string]: unknown };
 
@@ -11,6 +14,20 @@ function keyFor(tipo: string) {
 
 function text(value: unknown) {
   return String(value || "").trim();
+}
+
+function canManage(session: NonNullable<Awaited<ReturnType<typeof getSession>>>) {
+  return isAdminOrCoordinator(session) || isTeacher(session);
+}
+
+async function studentContext(session: NonNullable<Awaited<ReturnType<typeof getSession>>>) {
+  const [students, classes] = await Promise.all([dbList<Record<string, unknown>>("students.json"), getSchoolClasses()]);
+  const login = text(session.usuario).toLowerCase();
+  const name = text(session.pessoa).toLowerCase();
+  const student = students.find((row) =>
+    text(row.login).toLowerCase() === login || text(row.nome || row.name).toLowerCase() === name
+  );
+  return { student, classes };
 }
 
 async function livroFromFormData(req: NextRequest, key: string, existing: Livro = {}) {
@@ -57,12 +74,18 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const itens = await dbList(keyFor(searchParams.get("tipo") || "livros"));
+  if (text(session.perfil).toLowerCase().includes("aluno")) {
+    const { student, classes } = await studentContext(session);
+    if (!student) return NextResponse.json([], { status: 200 });
+    return NextResponse.json(itens.filter((item) => studentCanAccessLibraryItem(item as Record<string, unknown>, session, student, classes)));
+  }
   return NextResponse.json(itens);
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!canManage(session)) return NextResponse.json({ error: "Sem permissao para cadastrar materiais." }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const key = keyFor(searchParams.get("tipo") || "livros");
   const itens = await dbList<Livro>(key);
@@ -80,6 +103,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!canManage(session)) return NextResponse.json({ error: "Sem permissao para editar materiais." }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const key = keyFor(searchParams.get("tipo") || "livros");
   const itens = await dbList<Livro>(key);
@@ -98,6 +122,7 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  if (!canManage(session)) return NextResponse.json({ error: "Sem permissao para excluir materiais." }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
