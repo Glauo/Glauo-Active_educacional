@@ -444,6 +444,49 @@ function BoletoBtn({ lancamento }: { lancamento: Lancamento }) {
   );
 }
 
+function GerarBoletosMesBtn({ competencia, lancamentos }: { competencia: string; lancamentos: Lancamento[] }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const pendentes = lancamentos.filter((lancamento) => statusBadge(String(lancamento.status || lancamento.situacao || "")) !== "success").length;
+
+  async function gerar() {
+    if (!competencia || loading || pendentes === 0) return;
+    if (!confirm(`Gerar os boletos Mercado Pago pendentes de ${mesLabel(competencia)}? Boletos validos ja existentes serao preservados.`)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/financeiro/gerar-boletos-mes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competencia }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        alert(String(data.error || "Nao foi possivel gerar os boletos do mes."));
+        return;
+      }
+      const erros = Array.isArray(data.resultados)
+        ? data.resultados.filter((item: { ok?: boolean }) => !item.ok)
+        : [];
+      const resumo = `${Number(data.gerados || 0)} boleto(s) gerado(s). ${Number(data.ignorados || 0)} ja possuia(m) boleto valido.`;
+      alert(erros.length ? `${resumo}\n${erros.length} falha(s): ${erros.slice(0, 3).map((item: { aluno?: string; erro?: string }) => `${item.aluno || "Aluno"}: ${item.erro || "erro"}`).join(" | ")}` : resumo);
+      refreshKeepingPosition(router);
+    } catch {
+      alert("Erro de comunicacao ao gerar os boletos do mes.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (competencia === "sem-data" || pendentes === 0) return null;
+  return (
+    <button className="btn btn-primary btn-sm" type="button" onClick={gerar} disabled={loading}>
+      {loading ? "Gerando boletos..." : "Gerar boletos do mes"}
+    </button>
+  );
+}
+
 function PixBtn({ lancamento }: { lancamento: Lancamento }) {
   const [loading, setLoading] = useState(false);
   const id = String(lancamento.id || "");
@@ -967,6 +1010,7 @@ function RecebimentosTab({ recebimentos, canReversePayments }: { recebimentos: L
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 16 }}>
+                  <GerarBoletosMesBtn competencia={grupo.key} lancamentos={grupo.items} />
                   {recebido > 0 && (
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--green-700)", fontWeight: 700 }}>Recebido</div>
