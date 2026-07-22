@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { saveLibraryPdf, type LibraryPdfKey } from "@/lib/library-pdfs";
+import { deleteLibraryPdf, saveLibraryPdf, type LibraryPdfKey } from "@/lib/library-pdfs";
 import { studentCanAccessLibraryItem } from "@/lib/library-access";
 import { getSchoolClasses } from "@/lib/school-data";
 import { isAdminOrCoordinator, isTeacher } from "@/lib/roles";
@@ -128,6 +128,12 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
   const key = keyFor(searchParams.get("tipo") || "livros");
   const itens = await dbList<Livro>(key);
-  await dbSet(key, itens.filter((l) => l.id !== id));
+  if (!itens.some((item) => text(item.id) === id)) {
+    return NextResponse.json({ error: "Material nao encontrado ou ja excluido." }, { status: 404 });
+  }
+  await dbSet(key, itens.filter((item) => text(item.id) !== id));
+  if (key === "books.json" || key === "materials.json") {
+    await deleteLibraryPdf(key as LibraryPdfKey, id);
+  }
   return NextResponse.json({ ok: true });
 }

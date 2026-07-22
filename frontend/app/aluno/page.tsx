@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { StudentPortalClient } from "@/components/student-portal-client";
 import { isHomeworkActivity, normalizeList, studentMatchesTarget, text, type Homework, type HomeworkSubmission, type WallPost } from "@/lib/school-modules";
-import { hasWorkbookStudentTarget, releasedWorkbookLessons, studentWorkbookBook, workbookLibraryBooks } from "@/lib/workbook-lessons";
+import { hasWorkbookStudentTarget, releasedWorkbookLessons, studentWorkbookBook } from "@/lib/workbook-lessons";
 import { reconcileMercadoPagoPendingReceivables } from "@/lib/mercadopago-sync";
 import { studentCanAccessLibraryItem } from "@/lib/library-access";
 import { getSchoolClasses } from "@/lib/school-data";
@@ -82,15 +82,6 @@ function visibleChallenge(row: Desafio, session: NonNullable<Awaited<ReturnType<
   return studentMatchesTarget(row, session, aluno);
 }
 
-function normalizedTitle(value: unknown) {
-  return text(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export default async function AlunoHomePage() {
   const session = await getSession();
   if (!session) redirect("/aluno/login");
@@ -153,25 +144,8 @@ export default async function AlunoHomePage() {
   const minhaAgenda = agenda
     .filter((item) => matchesAgenda(item, meuPerfil, minhaTurma, sessionLite))
     .sort((a, b) => text(a.data || a.date).localeCompare(text(b.data || b.date)));
-  const workbooks = workbookLibraryBooks();
-  const workbookByTitle = new Map(workbooks.map((book) => [normalizedTitle(book.titulo), book]));
-  const livrosComFallback = livros.map((livro) => {
-    const workbook = workbookByTitle.get(normalizedTitle(livro.titulo || livro.title));
-    const url = text(livro.url || livro.file_path);
-    return workbook && url.startsWith("/uploads/livros/")
-      ? { ...livro, url: workbook.url, file_path: workbook.url, pdf_nome: livro.pdf_nome || workbook.pdf_nome }
-      : livro;
-  });
-  const livrosComWorkbooks = [
-    ...livrosComFallback,
-    ...workbooks.filter((book) => !livrosComFallback.some((livro) =>
-      text(livro.id) === book.id ||
-      text(livro.url) === book.url ||
-      normalizedTitle(livro.titulo || livro.title) === normalizedTitle(book.titulo)
-    )),
-  ];
   const minhaBiblioteca = {
-    livros: livrosComWorkbooks.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
+    livros: livros.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
     materiais: materiais.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
     videos: videos.filter((item) => studentCanAccessLibraryItem(item, session, meuPerfil, turmas)),
   };

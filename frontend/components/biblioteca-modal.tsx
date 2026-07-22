@@ -28,9 +28,20 @@ function LivroModal({ livro, onClose, onSaved }: { livro?: LivroData; onClose: (
   async function excluir() {
     if (!confirm(`Excluir o livro "${livro?.titulo || livro?.title}"?`)) return;
     setSaving(true);
-    await fetch(`/api/biblioteca?tipo=livros&id=${encodeURIComponent(String(livro!.id))}`, { method: "DELETE" });
-    setSaving(false);
-    onSaved();
+    setErro("");
+    try {
+      const res = await fetch(`/api/biblioteca?tipo=livros&id=${encodeURIComponent(String(livro!.id))}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErro((data as { error?: string }).error || "Nao foi possivel excluir o livro.");
+        return;
+      }
+      onSaved();
+    } catch {
+      setErro("Falha de conexao ao excluir o livro. Tente novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function salvar() {

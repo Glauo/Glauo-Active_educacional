@@ -1,4 +1,4 @@
-import { dbList, dbSet } from "./db";
+import { dbList, dbSet, dbUpdate } from "./db";
 
 export type LibraryPdfKey = "books.json" | "materials.json";
 
@@ -58,4 +58,11 @@ export async function saveLibraryPdf(key: LibraryPdfKey, id: string, buffer: Buf
 export async function getLibraryPdf(key: LibraryPdfKey, id: string) {
   const files = await dbList<LibraryPdfRecord>("library_files.json");
   return files.find((file) => file.library_key === key && file.id === id) || null;
+}
+
+export async function deleteLibraryPdf(key: LibraryPdfKey, id: string) {
+  await dbUpdate<LibraryPdfRecord[]>("library_files.json", (files) =>
+    (Array.isArray(files) ? files : []).filter((file) => file.library_key !== key || file.id !== id),
+    []
+  );
 }
