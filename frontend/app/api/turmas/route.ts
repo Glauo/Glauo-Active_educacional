@@ -11,6 +11,22 @@ function text(value: unknown) {
   return String(value || "").trim();
 }
 
+function normalized(value: unknown) {
+  return text(value).toLocaleLowerCase("pt-BR");
+}
+
+function className(turma: Record<string, unknown>) {
+  return text(turma.nome || turma.name);
+}
+
+function sameClass(turma: Record<string, unknown>, identifier: unknown) {
+  const target = text(identifier);
+  return Boolean(target) && (
+    text(turma.id) === target ||
+    normalized(className(turma)) === normalized(target)
+  );
+}
+
 function studentKey(student: Record<string, unknown>) {
   return text(student.id || student._id || student.uuid || student.matricula || student.nome || student.name);
 }
@@ -26,7 +42,7 @@ async function syncClassStudents(oldName: string, newName: string, selectedIds: 
       if (selected.has(key)) {
         return { ...student, turma: newName, classe: newName, updated_at: new Date().toISOString() };
       }
-      if (currentClass === oldName || currentClass === newName) {
+      if (normalized(currentClass) === normalized(oldName) || normalized(currentClass) === normalized(newName)) {
         return { ...student, turma: "Sem Turma", classe: "Sem Turma", updated_at: new Date().toISOString() };
       }
       return student;
@@ -53,7 +69,7 @@ export async function POST(req: NextRequest) {
     const turmas = await getSchoolClasses() as Record<string, unknown>[];
     const nome = text(classData.nome);
     if (!nome) return NextResponse.json({ error: "Nome da turma e obrigatorio." }, { status: 400 });
-    const exists = turmas.some((t) => text(t.nome).toLowerCase() === nome.toLowerCase());
+    const exists = turmas.some((t) => normalized(className(t)) === normalized(nome));
     if (exists) return NextResponse.json({ error: "Turma ja existe." }, { status: 409 });
 
     const modulo = migrateModule(classData.modulo || classData.tipo_aula || classData.modalidade);
@@ -78,12 +94,16 @@ export async function PUT(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "ID obrigatorio." }, { status: 400 });
 
     const turmas = await getSchoolClasses() as Record<string, unknown>[];
-    const idx = turmas.findIndex((t) => t.id === id || t.nome === id);
+    const idx = turmas.findIndex((t) => sameClass(t, id));
     if (idx === -1) return NextResponse.json({ error: "Turma nao encontrada. Atualize a pagina e tente novamente." }, { status: 404 });
 
-    const oldNome = text(turmas[idx].nome);
+    const oldNome = className(turmas[idx]);
+    const requestedNome = text(updates.nome || updates.name || oldNome);
+    if (!requestedNome) return NextResponse.json({ error: "Nome da turma e obrigatorio." }, { status: 400 });
+    const duplicate = turmas.some((turma, index) => index !== idx && normalized(className(turma)) === normalized(requestedNome));
+    if (duplicate) return NextResponse.json({ error: "Ja existe uma turma com este nome." }, { status: 409 });
     const modulo = migrateModule(updates.modulo || updates.tipo_aula || updates.modalidade || turmas[idx].modulo);
-    turmas[idx] = { ...turmas[idx], ...updates, modulo, tipo_aula: modulo, valor_aula: updates.valor_aula || turmas[idx].valor_aula || teacherClassValueByModule(modulo), updated_at: new Date().toISOString() };
+    turmas[idx] = { ...turmas[idx], ...updates, id: text(turmas[idx].id) || crypto.randomUUID(), nome: requestedNome, modulo, tipo_aula: modulo, valor_aula: updates.valor_aula || turmas[idx].valor_aula || teacherClassValueByModule(modulo), updated_at: new Date().toISOString() };
 
     const newNome = text(turmas[idx].nome);
     await dbSet(KEY, turmas);
@@ -92,7 +112,7 @@ export async function PUT(req: NextRequest) {
     } else if (oldNome && newNome && oldNome !== newNome) {
       await dbUpdate<Record<string, unknown>[]>("students.json", (current) =>
         (Array.isArray(current) ? current : []).map((aluno) =>
-          text(aluno.turma || aluno.classe) === oldNome
+          normalized(aluno.turma || aluno.classe) === normalized(oldNome)
             ? { ...aluno, turma: newNome, classe: newNome, updated_at: new Date().toISOString() }
             : aluno
         ), []);
@@ -112,10 +132,10 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id obrigatorio" }, { status: 400 });
   const turmas = await getSchoolClasses() as Record<string, unknown>[];
-  const target = turmas.find((t) => t.id === id || t.nome === id);
+  const target = turmas.find((t) => sameClass(t, id));
   if (!target) return NextResponse.json({ error: "Turma nao encontrada. Atualize a pagina e tente novamente." }, { status: 404 });
-  const targetName = text(target?.nome);
-  const filtered = turmas.filter((t) => t.id !== id && t.nome !== id);
+  const targetName = target ? className(target) : "";
+  const filtered = turmas.filter((t) => !sameClass(t, id));
 
   await dbSet(KEY, filtered);
   if (targetName) await syncClassStudents(targetName, "", []);
