@@ -9,6 +9,10 @@ const CANCELLATION_RATE = 0.1;
 
 function text(value: unknown) { return String(value || "").trim(); }
 
+function studentId(student: Row) {
+  return text(student.id || student.aluno_id || student.student_id || student.login || student.usuario || student.cpf);
+}
+
 function money(value: unknown) {
   const parsed = Number.parseFloat(text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", "."));
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
@@ -39,7 +43,7 @@ function activeStudent(student: Row) {
 }
 
 function sameStudent(student: Row, receivable: Row) {
-  const id = text(student.id);
+  const id = studentId(student);
   const login = text(student.login || student.usuario).toLowerCase();
   const name = text(student.nome || student.name).toLowerCase();
   return Boolean(
@@ -111,7 +115,7 @@ export async function POST(req: NextRequest) {
     const created: Row[] = [];
     const skipped: Row[] = [];
     for (const student of students.filter(activeStudent)) {
-      const alunoId = text(student.id);
+      const alunoId = studentId(student);
       const aluno = text(student.nome || student.name);
       if (!alunoId || !aluno || contracts.some((contract) => text(contract.aluno_id) === alunoId && openContract(contract))) {
         skipped.push({ aluno, motivo: "ja_possui_contrato" });
@@ -140,7 +144,7 @@ export async function POST(req: NextRequest) {
       const contractIds = new Map(created.map((contract) => [text(contract.aluno_id), contract]));
       await dbUpdate<Row[]>("contracts.json", (items) => [...(Array.isArray(items) ? items : []), ...created], []);
       await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => {
-        const contract = contractIds.get(text(student.id));
+      const contract = contractIds.get(studentId(student));
         return contract ? {
           ...student,
           contrato_id: contract.id,
@@ -182,8 +186,8 @@ export async function POST(req: NextRequest) {
       observacoes: text(body.observacoes),
     };
     await dbUpdate<Row[]>("contracts.json", (items) => [...(Array.isArray(items) ? items : []), contract], []);
-    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === alunoId ? {
-      ...student,
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => studentId(student) === alunoId ? {
+          ...student,
       contrato_id: contract.id,
       situacao_contrato: "Ativo",
       contrato_inicio: contract.data_inicio,
@@ -209,7 +213,7 @@ export async function POST(req: NextRequest) {
       motivo_desistencia: text(body.motivo),
     };
     await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((item) => text(item.id) === contractId ? updated : item), []);
-    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === text(current.aluno_id) ? { ...student, situacao_contrato: "Desistencia solicitada" } : student), []);
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => studentId(student) === text(current.aluno_id) ? { ...student, situacao_contrato: "Desistencia solicitada" } : student), []);
     await audit({ acao: "desistencia_contrato", contrato_id: contractId, aluno_id: current.aluno_id, aluno: current.aluno, usuario: actor, perfil: session.perfil, motivo: text(body.motivo) });
     return NextResponse.json({ ok: true, contrato: updated });
   }
@@ -251,7 +255,7 @@ export async function POST(req: NextRequest) {
 
     await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((item) => text(item.id) === contractId ? updated : item), []);
     if (feeReceivable && !existingFee) await dbUpdate<Row[]>("receivables.json", (items) => [...(Array.isArray(items) ? items : []), feeReceivable], []);
-    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === text(current.aluno_id) ? {
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => studentId(student) === text(current.aluno_id) ? {
       ...student,
       situacao_contrato: "Cancelado",
       contrato_cancelado_em: updated.cancelado_em,
