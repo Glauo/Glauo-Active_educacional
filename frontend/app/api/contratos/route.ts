@@ -37,6 +37,13 @@ function openContract(contract: Row) {
   return status === "ativo" || status === "inscrito" || status === "desistencia solicitada";
 }
 
+function contractType(contract: Row) {
+  const type = text(contract.tipo || contract.documento_tipo).toLowerCase();
+  if (type.includes("cancel")) return "Cancelamento";
+  if (type.includes("troca") || type.includes("modalidade")) return "Troca de modalidade";
+  return "Matricula";
+}
+
 function activeStudent(student: Row) {
   const status = text(student.status || student.situacao || "Ativo").toLowerCase();
   return student.is_active !== false && !status.includes("cancel") && !status.includes("inativ") && !status.includes("tranc");
@@ -134,6 +141,7 @@ export async function POST(req: NextRequest) {
         valor_mensal: value,
         valor_total: Number((value * CONTRACT_MONTHS).toFixed(2)),
         valor_pendente: value <= 0,
+        tipo: "Matricula",
         status: "Ativo",
         inscrito_em: new Date().toISOString(),
         inscrito_por: actor,
@@ -180,6 +188,7 @@ export async function POST(req: NextRequest) {
       parcelas_totais: CONTRACT_MONTHS,
       valor_mensal: valorMensal,
       valor_total: Number((valorMensal * CONTRACT_MONTHS).toFixed(2)),
+      tipo: "Matricula",
       status: "Ativo",
       inscrito_em: new Date().toISOString(),
       inscrito_por: actor,
@@ -235,6 +244,7 @@ export async function POST(req: NextRequest) {
     };
     const receivables = await dbList<Row>("receivables.json");
     const existingFee = receivables.find((row) => text(row.contract_id) === contractId && text(row.tipo_cobranca) === "Taxa de cancelamento" && !text(row.status).toLowerCase().includes("cancel"));
+    const cancellationDocument = contracts.find((item) => text(item.contrato_origem_id) === contractId && contractType(item) === "Cancelamento");
     const feeReceivable = existingFee || (values.fee > 0 ? {
       id: crypto.randomUUID(),
       contract_id: contractId,
@@ -253,7 +263,27 @@ export async function POST(req: NextRequest) {
       envio_automatico_bloqueado: true,
     } : null);
 
-    await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((item) => text(item.id) === contractId ? updated : item), []);
+    const cancellationRecord = cancellationDocument || {
+      id: crypto.randomUUID(),
+      tipo: "Cancelamento",
+      contrato_origem_id: contractId,
+      aluno_id: text(current.aluno_id),
+      aluno: text(current.aluno),
+      aluno_login: text(current.aluno_login),
+      curso: text(current.curso),
+      data_inicio: dateOnly(body.data_cancelamento || new Date().toISOString().slice(0, 10)),
+      status: "Registrado",
+      motivo_cancelamento: text(body.motivo),
+      taxa_cancelamento_percentual: 10,
+      taxa_cancelamento_valor: values.fee,
+      parcelas_restantes_cancelamento: values.remaining,
+      registrado_em: new Date().toISOString(),
+      registrado_por: actor,
+    };
+    await dbUpdate<Row[]>("contracts.json", (items) => {
+      const currentItems = Array.isArray(items) ? items : [];
+      return [...currentItems.map((item) => text(item.id) === contractId ? updated : item), ...(cancellationDocument ? [] : [cancellationRecord])];
+    }, []);
     if (feeReceivable && !existingFee) await dbUpdate<Row[]>("receivables.json", (items) => [...(Array.isArray(items) ? items : []), feeReceivable], []);
     await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => studentId(student) === text(current.aluno_id) ? {
       ...student,
@@ -263,7 +293,43 @@ export async function POST(req: NextRequest) {
       is_active: false,
     } : student), []);
     await audit({ acao: "cancelamento_contrato", contrato_id: contractId, aluno_id: current.aluno_id, aluno: current.aluno, usuario: actor, perfil: session.perfil, motivo: text(body.motivo), ...values, taxa_lancamento_id: feeReceivable?.id || "" });
-    return NextResponse.json({ ok: true, contrato: updated, taxa_cancelamento: feeReceivable, calculo: values });
+    return NextResponse.json({ ok: true, contrato: updated, documento_cancelamento: cancellationRecord, taxa_cancelamento: feeReceivable, calculo: values });
+  }
+
+  if (action === "troca_modalidade") {
+    if (!openContract(current)) return NextResponse.json({ error: "Este contrato nao permite troca de modalidade." }, { status: 409 });
+    const novaModalidade = text(body.nova_modalidade);
+    if (!novaModalidade) return NextResponse.json({ error: "Informe a nova modalidade." }, { status: 400 });
+    const antigaModalidade = text(current.curso) || "Curso de ingles";
+    if (novaModalidade === antigaModalidade) return NextResponse.json({ error: "Selecione uma modalidade diferente da atual." }, { status: 400 });
+    const changeRecord = {
+      id: crypto.randomUUID(),
+      tipo: "Troca de modalidade",
+      contrato_origem_id: contractId,
+      aluno_id: text(current.aluno_id),
+      aluno: text(current.aluno),
+      aluno_login: text(current.aluno_login),
+      curso: novaModalidade,
+      modalidade_anterior: antigaModalidade,
+      modalidade_nova: novaModalidade,
+      data_inicio: dateOnly(body.data_troca || new Date().toISOString().slice(0, 10)),
+      status: "Registrado",
+      motivo_troca_modalidade: text(body.motivo),
+      registrado_em: new Date().toISOString(),
+      registrado_por: actor,
+    };
+    const updated = { ...current, curso: novaModalidade, modalidade_atualizada_em: changeRecord.data_inicio };
+    await dbUpdate<Row[]>("contracts.json", (items) => {
+      const currentItems = Array.isArray(items) ? items : [];
+      return [...currentItems.map((item) => text(item.id) === contractId ? updated : item), changeRecord];
+    }, []);
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => studentId(student) === text(current.aluno_id) ? {
+      ...student,
+      modalidade_anterior: text(student.modalidade),
+      modalidade: novaModalidade,
+    } : student), []);
+    await audit({ acao: "troca_modalidade_contrato", contrato_id: contractId, aluno_id: current.aluno_id, aluno: current.aluno, usuario: actor, perfil: session.perfil, modalidade_anterior: antigaModalidade, modalidade_nova: novaModalidade, motivo: text(body.motivo) });
+    return NextResponse.json({ ok: true, contrato: updated, documento_troca_modalidade: changeRecord });
   }
 
   return NextResponse.json({ error: "Acao de contrato invalida." }, { status: 400 });

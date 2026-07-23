@@ -5,6 +5,9 @@ import { dbList } from "@/lib/db";
 import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ContratosPage() {
   const session = await getSession();
   if (!session) redirect("/login");
