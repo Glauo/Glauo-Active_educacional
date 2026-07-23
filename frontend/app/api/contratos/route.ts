@@ -1,0 +1,177 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import { dbList, dbUpdate } from "@/lib/db";
+import { isAdmin, isAdminOrCoordinator } from "@/lib/roles";
+
+type Row = Record<string, unknown>;
+const CONTRACT_MONTHS = 24;
+const CANCELLATION_RATE = 0.1;
+
+function text(value: unknown) { return String(value || "").trim(); }
+
+function money(value: unknown) {
+  const parsed = Number.parseFloat(text(value).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+}
+
+function dateOnly(value: unknown) {
+  const raw = text(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : new Date().toISOString().slice(0, 10);
+}
+
+function monthDifference(start: string, end = new Date()) {
+  const match = start.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return 0;
+  const startDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  let months = (end.getFullYear() - startDate.getFullYear()) * 12 + end.getMonth() - startDate.getMonth();
+  if (end.getDate() < startDate.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+function openContract(contract: Row) {
+  const status = text(contract.status).toLowerCase();
+  return status === "ativo" || status === "inscrito" || status === "desistencia solicitada";
+}
+
+function cancellationValues(contract: Row) {
+  const start = dateOnly(contract.data_inicio || contract.inscrito_em);
+  const totalInstallments = Math.max(1, Number(contract.parcelas_totais) || CONTRACT_MONTHS);
+  const elapsed = Math.min(totalInstallments, monthDifference(start));
+  const remaining = Math.max(0, totalInstallments - elapsed);
+  const monthlyValue = money(contract.valor_mensal);
+  const fee = Number((monthlyValue * remaining * CANCELLATION_RATE).toFixed(2));
+  return { totalInstallments, elapsed, remaining, monthlyValue, fee };
+}
+
+async function audit(entry: Row) {
+  await dbUpdate<Row[]>("contract_audit.json", (items) => [
+    ...(Array.isArray(items) ? items : []),
+    { id: crypto.randomUUID(), data: new Date().toISOString(), ...entry },
+  ], []);
+}
+
+export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  if (!isAdminOrCoordinator(session)) return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
+  return NextResponse.json({ contratos: await dbList<Row>("contracts.json") });
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Nao autorizado." }, { status: 401 });
+  if (!isAdminOrCoordinator(session)) return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
+
+  const body = await req.json().catch(() => ({})) as Row;
+  const action = text(body.action).toLowerCase();
+  const actor = session.pessoa || session.usuario;
+
+  if (action === "inscricao") {
+    const alunoId = text(body.aluno_id);
+    const aluno = text(body.aluno);
+    const valorMensal = money(body.valor_mensal);
+    if (!alunoId || !aluno || valorMensal <= 0) {
+      return NextResponse.json({ error: "Aluno e valor mensal valido sao obrigatorios." }, { status: 400 });
+    }
+    const contracts = await dbList<Row>("contracts.json");
+    if (contracts.some((contract) => text(contract.aluno_id) === alunoId && openContract(contract))) {
+      return NextResponse.json({ error: "Este aluno ja possui um contrato ativo. Registre desistência ou cancelamento antes de criar outro." }, { status: 409 });
+    }
+    const contract = {
+      id: crypto.randomUUID(),
+      aluno_id: alunoId,
+      aluno,
+      aluno_login: text(body.aluno_login),
+      curso: text(body.curso) || "Curso de ingles",
+      data_inicio: dateOnly(body.data_inicio),
+      parcelas_totais: CONTRACT_MONTHS,
+      valor_mensal: valorMensal,
+      valor_total: Number((valorMensal * CONTRACT_MONTHS).toFixed(2)),
+      status: "Ativo",
+      inscrito_em: new Date().toISOString(),
+      inscrito_por: actor,
+      observacoes: text(body.observacoes),
+    };
+    await dbUpdate<Row[]>("contracts.json", (items) => [...(Array.isArray(items) ? items : []), contract], []);
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === alunoId ? {
+      ...student,
+      contrato_id: contract.id,
+      situacao_contrato: "Ativo",
+      contrato_inicio: contract.data_inicio,
+      contrato_parcelas_totais: CONTRACT_MONTHS,
+    } : student), []);
+    await audit({ acao: "inscricao_contrato", contrato_id: contract.id, aluno_id: alunoId, aluno, usuario: actor, perfil: session.perfil });
+    return NextResponse.json({ ok: true, contrato: contract }, { status: 201 });
+  }
+
+  const contractId = text(body.contrato_id);
+  if (!contractId) return NextResponse.json({ error: "Contrato obrigatorio." }, { status: 400 });
+  const contracts = await dbList<Row>("contracts.json");
+  const current = contracts.find((contract) => text(contract.id) === contractId);
+  if (!current) return NextResponse.json({ error: "Contrato nao encontrado." }, { status: 404 });
+
+  if (action === "desistencia") {
+    if (!openContract(current)) return NextResponse.json({ error: "Este contrato nao permite desistência." }, { status: 409 });
+    const updated = {
+      ...current,
+      status: "Desistencia solicitada",
+      desistencia_em: new Date().toISOString(),
+      desistencia_por: actor,
+      motivo_desistencia: text(body.motivo),
+    };
+    await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((item) => text(item.id) === contractId ? updated : item), []);
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === text(current.aluno_id) ? { ...student, situacao_contrato: "Desistencia solicitada" } : student), []);
+    await audit({ acao: "desistencia_contrato", contrato_id: contractId, aluno_id: current.aluno_id, aluno: current.aluno, usuario: actor, perfil: session.perfil, motivo: text(body.motivo) });
+    return NextResponse.json({ ok: true, contrato: updated });
+  }
+
+  if (action === "cancelamento") {
+    if (!isAdmin(session)) return NextResponse.json({ error: "Somente administrador pode confirmar cancelamento com taxa financeira." }, { status: 403 });
+    if (!openContract(current)) return NextResponse.json({ error: "Este contrato ja esta encerrado." }, { status: 409 });
+
+    const values = cancellationValues(current);
+    const updated = {
+      ...current,
+      status: "Cancelado",
+      cancelado_em: new Date().toISOString(),
+      cancelado_por: actor,
+      motivo_cancelamento: text(body.motivo),
+      taxa_cancelamento_percentual: 10,
+      taxa_cancelamento_valor: values.fee,
+      parcelas_restantes_cancelamento: values.remaining,
+    };
+    const receivables = await dbList<Row>("receivables.json");
+    const existingFee = receivables.find((row) => text(row.contract_id) === contractId && text(row.tipo_cobranca) === "Taxa de cancelamento" && !text(row.status).toLowerCase().includes("cancel"));
+    const feeReceivable = existingFee || (values.fee > 0 ? {
+      id: crypto.randomUUID(),
+      contract_id: contractId,
+      aluno_id: text(current.aluno_id),
+      aluno: text(current.aluno),
+      aluno_login: text(current.aluno_login),
+      descricao: `Taxa de cancelamento contratual - 10% de ${values.remaining} parcela(s) restante(s)`,
+      tipo_cobranca: "Taxa de cancelamento",
+      categoria: "Taxa de cancelamento",
+      valor: values.fee,
+      valor_parcela: values.fee,
+      vencimento: dateOnly(body.vencimento || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)),
+      status: "Aberto",
+      created_at: new Date().toISOString(),
+      created_by: actor,
+      envio_automatico_bloqueado: true,
+    } : null);
+
+    await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((item) => text(item.id) === contractId ? updated : item), []);
+    if (feeReceivable && !existingFee) await dbUpdate<Row[]>("receivables.json", (items) => [...(Array.isArray(items) ? items : []), feeReceivable], []);
+    await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => text(student.id) === text(current.aluno_id) ? {
+      ...student,
+      situacao_contrato: "Cancelado",
+      contrato_cancelado_em: updated.cancelado_em,
+      status: "Cancelado",
+      is_active: false,
+    } : student), []);
+    await audit({ acao: "cancelamento_contrato", contrato_id: contractId, aluno_id: current.aluno_id, aluno: current.aluno, usuario: actor, perfil: session.perfil, motivo: text(body.motivo), ...values, taxa_lancamento_id: feeReceivable?.id || "" });
+    return NextResponse.json({ ok: true, contrato: updated, taxa_cancelamento: feeReceivable, calculo: values });
+  }
+
+  return NextResponse.json({ error: "Acao de contrato invalida." }, { status: 400 });
+}
