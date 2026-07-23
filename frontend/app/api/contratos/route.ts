@@ -33,6 +33,42 @@ function openContract(contract: Row) {
   return status === "ativo" || status === "inscrito" || status === "desistencia solicitada";
 }
 
+function activeStudent(student: Row) {
+  const status = text(student.status || student.situacao || "Ativo").toLowerCase();
+  return student.is_active !== false && !status.includes("cancel") && !status.includes("inativ") && !status.includes("tranc");
+}
+
+function sameStudent(student: Row, receivable: Row) {
+  const id = text(student.id);
+  const login = text(student.login || student.usuario).toLowerCase();
+  const name = text(student.nome || student.name).toLowerCase();
+  return Boolean(
+    (id && text(receivable.aluno_id || receivable.student_id) === id) ||
+    (login && text(receivable.aluno_login || receivable.login).toLowerCase() === login) ||
+    (name && text(receivable.aluno || receivable.nome).toLowerCase() === name)
+  );
+}
+
+function dateValue(value: unknown) {
+  const raw = dateOnly(value);
+  return new Date(`${raw}T12:00:00`).getTime();
+}
+
+function monthlyRows(student: Row, receivables: Row[]) {
+  return receivables
+    .filter((row) => sameStudent(student, row) && text(`${row.categoria || ""} ${row.tipo_cobranca || ""} ${row.descricao || ""}`).toLowerCase().includes("mensal"))
+    .sort((a, b) => dateValue(a.vencimento || a.data_vencimento) - dateValue(b.vencimento || b.data_vencimento));
+}
+
+function contractStart(student: Row, monthly: Row[]) {
+  return dateOnly(student.contrato_inicio || student.data_matricula || student.matricula_data || monthly[0]?.vencimento || monthly[0]?.data_vencimento || student.created_at);
+}
+
+function studentMonthlyValue(student: Row, monthly: Row[]) {
+  const direct = money(student.mensalidade || student.valor_mensalidade || student.plano_valor);
+  return direct || money(monthly.find((row) => money(row.valor_parcela ?? row.valor) > 0)?.valor_parcela ?? monthly.find((row) => money(row.valor_parcela ?? row.valor) > 0)?.valor);
+}
+
 function cancellationValues(contract: Row) {
   const start = dateOnly(contract.data_inicio || contract.inscrito_em);
   const totalInstallments = Math.max(1, Number(contract.parcelas_totais) || CONTRACT_MONTHS);
@@ -65,6 +101,59 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as Row;
   const action = text(body.action).toLowerCase();
   const actor = session.pessoa || session.usuario;
+
+  if (action === "inscricao_lote") {
+    const [students, contracts, receivables] = await Promise.all([
+      dbList<Row>("students.json"),
+      dbList<Row>("contracts.json"),
+      dbList<Row>("receivables.json"),
+    ]);
+    const created: Row[] = [];
+    const skipped: Row[] = [];
+    for (const student of students.filter(activeStudent)) {
+      const alunoId = text(student.id);
+      const aluno = text(student.nome || student.name);
+      if (!alunoId || !aluno || contracts.some((contract) => text(contract.aluno_id) === alunoId && openContract(contract))) {
+        skipped.push({ aluno, motivo: "ja_possui_contrato" });
+        continue;
+      }
+      const monthly = monthlyRows(student, receivables);
+      const value = studentMonthlyValue(student, monthly);
+      created.push({
+        id: crypto.randomUUID(),
+        aluno_id: alunoId,
+        aluno,
+        aluno_login: text(student.login || student.usuario),
+        curso: text(student.modulo || student.modalidade) || "Curso de ingles",
+        data_inicio: contractStart(student, monthly),
+        parcelas_totais: CONTRACT_MONTHS,
+        valor_mensal: value,
+        valor_total: Number((value * CONTRACT_MONTHS).toFixed(2)),
+        valor_pendente: value <= 0,
+        status: "Ativo",
+        inscrito_em: new Date().toISOString(),
+        inscrito_por: actor,
+        origem: "inclusao_lote_alunos_ativos",
+      });
+    }
+    if (created.length) {
+      const contractIds = new Map(created.map((contract) => [text(contract.aluno_id), contract]));
+      await dbUpdate<Row[]>("contracts.json", (items) => [...(Array.isArray(items) ? items : []), ...created], []);
+      await dbUpdate<Row[]>("students.json", (items) => (Array.isArray(items) ? items : []).map((student) => {
+        const contract = contractIds.get(text(student.id));
+        return contract ? {
+          ...student,
+          contrato_id: contract.id,
+          situacao_contrato: "Ativo",
+          contrato_inicio: contract.data_inicio,
+          contrato_parcelas_totais: CONTRACT_MONTHS,
+        } : student;
+      }), []);
+    }
+    const pendentesValor = created.filter((contract) => contract.valor_pendente).length;
+    await audit({ acao: "inclusao_lote_contratos", usuario: actor, perfil: session.perfil, criados: created.length, ignorados: skipped.length, valores_pendentes: pendentesValor });
+    return NextResponse.json({ ok: true, criados: created.length, ignorados: skipped.length, valores_pendentes: pendentesValor, contratos: created, detalhes_ignorados: skipped });
+  }
 
   if (action === "inscricao") {
     const alunoId = text(body.aluno_id);
