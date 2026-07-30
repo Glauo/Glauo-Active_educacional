@@ -113,6 +113,18 @@ export async function POST(req: NextRequest) {
   const action = text(body.action).toLowerCase();
   const actor = session.pessoa || session.usuario;
 
+  if (action === "normalizar_matriculas") {
+    if (!isAdmin(session)) return NextResponse.json({ error: "Somente administrador pode normalizar contratos existentes." }, { status: 403 });
+    let updatedCount = 0;
+    await dbUpdate<Row[]>("contracts.json", (items) => (Array.isArray(items) ? items : []).map((contract) => {
+      if (text(contract.tipo || contract.documento_tipo)) return contract;
+      updatedCount += 1;
+      return { ...contract, tipo: "Matricula", tipo_normalizado_em: new Date().toISOString(), tipo_normalizado_por: actor };
+    }), []);
+    await audit({ acao: "normalizacao_contratos_matricula", usuario: actor, perfil: session.perfil, contratos_atualizados: updatedCount });
+    return NextResponse.json({ ok: true, atualizados: updatedCount });
+  }
+
   if (action === "inscricao_lote") {
     const [students, contracts, receivables] = await Promise.all([
       dbList<Row>("students.json"),
