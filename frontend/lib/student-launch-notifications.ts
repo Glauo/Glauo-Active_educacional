@@ -119,7 +119,7 @@ export async function notifyStudentsAboutLaunch({
   session?: Pick<SessionUser, "usuario" | "pessoa" | "perfil"> | null;
 }): Promise<NotifyResult> {
   const recipients = targetStudents(students, item);
-  if (!automaticStudentMessagesEnabled()) {
+  if (!(await automaticStudentMessagesEnabled())) {
     return {
       push: recipients.length ? "portal_sininho_e_inicio" : "sem_destinatarios",
       whatsapp: "automatico_desativado",

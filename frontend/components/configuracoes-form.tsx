@@ -35,7 +35,7 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
   const [feedback, setFeedback] = useState<{ tipo: "ok" | "erro"; msg: string } | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
-  function sys(field: keyof SistemaConfig, value: string) { setSistema((p) => ({ ...p, [field]: value })); }
+  function sys(field: keyof SistemaConfig, value: string | boolean) { setSistema((p) => ({ ...p, [field]: value })); }
   function mtp(field: keyof SmtpConfig, value: string | boolean) { setSmtp((p) => ({ ...p, [field]: value })); }
   function bol(field: keyof BoletoConfig, value: string) { setBoleto((p) => ({ ...p, [field]: value })); }
   const smtpAtivo = Boolean(smtp.enabled);
@@ -292,6 +292,17 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
               </div>
               <div className="form-group form-group-span2">
                 <div className="form-help">Preencha URL, token e instância. Ao salvar, boletos, credenciais, respostas e envios em massa disparam automaticamente pelo backend. O link manual continua aparecendo como fallback.</div>
+              </div>
+              <div className="form-group form-group-span2">
+                <label className="attendance-item">
+                  <input
+                    type="checkbox"
+                    checked={sistema.envio_automatico_comunicados !== false && String(sistema.envio_automatico_comunicados || "").toLowerCase() !== "false"}
+                    onChange={(e) => sys("envio_automatico_comunicados", e.target.checked)}
+                  />
+                  Enviar comunicados automaticamente por WhatsApp e e-mail
+                </label>
+                <div className="form-help">Quando desativado, o comunicado continua disponível no portal do aluno, sem disparo externo.</div>
               </div>
             </div>
           </div>
