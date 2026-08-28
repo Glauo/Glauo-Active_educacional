@@ -197,6 +197,25 @@ export function ConfiguracoesForm({ sistema: s0, smtp: m0, boleto: b0 }: Props) 
           </div>
         </div>
 
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="section-eyebrow">Financeiro</div>
+              <h3 className="section-title">Valores por aula</h3>
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="form-grid">
+              <div className="form-group"><label className="form-label">Aula em Turma</label><input className="form-input" inputMode="decimal" value={String(sistema.valor_aula_turma ?? "100")} onChange={(e) => sys("valor_aula_turma", e.target.value)} placeholder="Ex: 100,00" /></div>
+              <div className="form-group"><label className="form-label">Aula Teens Presencial</label><input className="form-input" inputMode="decimal" value={String(sistema.valor_aula_teens ?? "100")} onChange={(e) => sys("valor_aula_teens", e.target.value)} placeholder="Ex: 100,00" /></div>
+              <div className="form-group"><label className="form-label">Aulas VIP Personalizadas</label><input className="form-input" inputMode="decimal" value={String(sistema.valor_aula_vip ?? "50")} onChange={(e) => sys("valor_aula_vip", e.target.value)} placeholder="Ex: 50,00" /></div>
+              <div className="form-group"><label className="form-label">Intensivo Online Ouro</label><input className="form-input" inputMode="decimal" value={String(sistema.valor_aula_intensivo ?? "30")} onChange={(e) => sys("valor_aula_intensivo", e.target.value)} placeholder="Ex: 30,00" /></div>
+              <div className="form-group"><label className="form-label">Reposição de Aula</label><input className="form-input" inputMode="decimal" value={String(sistema.valor_aula_reposicao ?? "50")} onChange={(e) => sys("valor_aula_reposicao", e.target.value)} placeholder="Ex: 50,00" /></div>
+              <div className="form-group form-group-span2"><div className="form-help">Os valores valem para novas turmas e aulas fechadas após salvar. Valores já lançados no financeiro permanecem inalterados.</div></div>
+            </div>
+          </div>
+        </div>
+
         {/* SMTP */}
         <div className="card">
           <div className="card-header">

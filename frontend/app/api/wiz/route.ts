@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { migrateModule, teacherClassValueByModule } from "@/lib/course-modules";
+import { migrateModule } from "@/lib/course-modules";
+import { configuredTeacherClassValue } from "@/lib/course-module-values.server";
 import { saveLibraryPdf, type LibraryPdfKey } from "@/lib/library-pdfs";
 import {
   SALES_AGENDA_KEY,
@@ -491,7 +492,7 @@ async function createStudent(data: Row) {
     telefone: text(data.telefone || data.whatsapp),
     email: text(data.email),
     valor_mensalidade: text(data.valor_mensalidade),
-    valor_professor_aula: teacherClassValueByModule(modulo),
+    valor_professor_aula: await configuredTeacherClassValue(modulo),
     status: "Ativo",
     created_at: new Date().toISOString(),
     created_by: "Assistente Wiz",
@@ -1070,7 +1071,7 @@ async function recordTeacherClass(prompt: string, actor: string): Promise<Row> {
   const turmaName = text(turmaFound.nome || turmaFound.name);
   const modulo = migrateModule(turmaFound.modulo || turmaFound.tipo_aula || turmaFound.modalidade || turmaFound.nivel);
   const livro = text(turmaFound.livro || turmaFound.book);
-  const valorAula = teacherClassValueByModule(modulo) ||
+  const valorAula = await configuredTeacherClassValue(modulo) ||
     parseMoney((teacher as Row).valor_aula || (teacher as Row).valor_hora || (teacher as Row).valor || turmaFound.valor_aula || "0");
 
   const aulaId = crypto.randomUUID();

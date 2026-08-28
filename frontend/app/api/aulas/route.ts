@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
 import { isAdminOrCoordinator, isTeacher, sameName } from "@/lib/roles";
-import { isVipModule, migrateModule, teacherClassValueByModule, VIP_DEFAULT_TOTAL, vipPackageStats } from "@/lib/course-modules";
+import { isVipModule, migrateModule, VIP_DEFAULT_TOTAL, vipPackageStats } from "@/lib/course-modules";
+import { configuredTeacherClassValue } from "@/lib/course-module-values.server";
 
 type Row = Record<string, unknown>;
 
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
       if (presencas.some((p) => typeof p.presente !== "boolean")) return NextResponse.json({ error: "Marque presenca ou falta de todos os alunos." }, { status: 400 });
 
       const modulo = classModule(turma);
-      const valorPorModulo = teacherClassValueByModule(modulo);
+      const valorPorModulo = await configuredTeacherClassValue(modulo);
       const valorAula = valorPorModulo || moneyValue((manager ? body.valor_aula : undefined) || turma.valor_aula || teacher.valor_aula || teacher.valor_hora || teacher.valor);
       const base = aulas[idx];
       const professorDaAula = manager ? professor : text(base.professor || turma.professor || session.pessoa || session.usuario);

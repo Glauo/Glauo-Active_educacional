@@ -3,7 +3,8 @@ import { dbSet, dbUpdate } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isAdminOrCoordinator } from "@/lib/roles";
 import { getSchoolClasses } from "@/lib/school-data";
-import { migrateModule, teacherClassValueByModule } from "@/lib/course-modules";
+import { migrateModule } from "@/lib/course-modules";
+import { configuredTeacherClassValue } from "@/lib/course-module-values.server";
 
 const KEY = "classes.json";
 
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     if (exists) return NextResponse.json({ error: "Turma ja existe." }, { status: 409 });
 
     const modulo = migrateModule(classData.modulo || classData.tipo_aula || classData.modalidade);
-    const nova = { ...classData, nome, modulo, tipo_aula: modulo, valor_aula: classData.valor_aula || teacherClassValueByModule(modulo), id: classData.id || crypto.randomUUID(), created_at: new Date().toISOString() };
+    const nova = { ...classData, nome, modulo, tipo_aula: modulo, valor_aula: classData.valor_aula || await configuredTeacherClassValue(modulo), id: classData.id || crypto.randomUUID(), created_at: new Date().toISOString() };
     turmas.push(nova);
     await dbSet(KEY, turmas);
     await syncClassStudents("", nome, aluno_ids);
@@ -103,7 +104,7 @@ export async function PUT(req: NextRequest) {
     const duplicate = turmas.some((turma, index) => index !== idx && normalized(className(turma)) === normalized(requestedNome));
     if (duplicate) return NextResponse.json({ error: "Ja existe uma turma com este nome." }, { status: 409 });
     const modulo = migrateModule(updates.modulo || updates.tipo_aula || updates.modalidade || turmas[idx].modulo);
-    turmas[idx] = { ...turmas[idx], ...updates, id: text(turmas[idx].id) || crypto.randomUUID(), nome: requestedNome, modulo, tipo_aula: modulo, valor_aula: updates.valor_aula || turmas[idx].valor_aula || teacherClassValueByModule(modulo), updated_at: new Date().toISOString() };
+    turmas[idx] = { ...turmas[idx], ...updates, id: text(turmas[idx].id) || crypto.randomUUID(), nome: requestedNome, modulo, tipo_aula: modulo, valor_aula: updates.valor_aula || turmas[idx].valor_aula || await configuredTeacherClassValue(modulo), updated_at: new Date().toISOString() };
 
     const newNome = text(turmas[idx].nome);
     await dbSet(KEY, turmas);

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbList, dbListWithoutKeys, dbSet } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isAdminOrCoordinator } from "@/lib/roles";
-import { isVipModule, isVipUnlimitedPlan, migrateModule, teacherClassValueByModule, VIP_DEFAULT_TOTAL, VIP_UNLIMITED, vipPlanTotal } from "@/lib/course-modules";
+import { isVipModule, isVipUnlimitedPlan, migrateModule, VIP_DEFAULT_TOTAL, VIP_UNLIMITED, vipPlanTotal } from "@/lib/course-modules";
+import { configuredTeacherClassValue } from "@/lib/course-module-values.server";
 import { applyGeneratedStudentCredentials } from "@/lib/student-credentials";
 import { ensureStudentMonthlyBilling } from "@/lib/monthly-billing";
 
@@ -32,7 +33,7 @@ function nextMatricula(alunos: Record<string, unknown>[]) {
   return String(max + 1).padStart(4, "0");
 }
 
-function normalizeAluno(body: Record<string, unknown>) {
+async function normalizeAluno(body: Record<string, unknown>) {
   const modulo = migrateModule(body.modulo || body.modalidade);
   const vip = isVipModule(modulo);
   const tipoPlanosRaw = text(body.vip_tipo_plano || "Pacote 10 aulas");
@@ -86,7 +87,7 @@ function normalizeAluno(body: Record<string, unknown>) {
     complemento: text(body.complemento),
     cidade: text(body.cidade),
     bairro: text(body.bairro),
-    valor_professor_aula: teacherClassValueByModule(modulo),
+    valor_professor_aula: await configuredTeacherClassValue(modulo),
     vip_tipo_plano: vip ? tipoPlanosRaw : "",
     vip_aulas_total: vipTotal,
     vip_aulas_restantes: vipRestantes,
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const alunos = await dbList<Record<string, unknown>>(KEY);
-    const normalized = normalizeAluno(body);
+    const normalized = await normalizeAluno(body);
     if (!text(normalized.nome)) return NextResponse.json({ error: "Nome do aluno e obrigatorio." }, { status: 400 });
     if (!text(normalized.matricula)) normalized.matricula = nextMatricula(alunos);
 
@@ -158,7 +159,7 @@ export async function PUT(req: NextRequest) {
     const idx = alunos.findIndex((a) => a.id === id || a.nome === id);
     if (idx === -1) return NextResponse.json({ error: "Aluno não encontrado." }, { status: 404 });
 
-    alunos[idx] = { ...alunos[idx], ...normalizeAluno(updates), updated_at: new Date().toISOString() };
+    alunos[idx] = { ...alunos[idx], ...await normalizeAluno(updates), updated_at: new Date().toISOString() };
     await dbSet(KEY, alunos);
     await ensureStudentMonthlyBilling(alunos[idx], session);
     return NextResponse.json({ ok: true, aluno: alunos[idx], notification_status: { whatsapp: "nao_enviado", email: "nao_enviado" } });

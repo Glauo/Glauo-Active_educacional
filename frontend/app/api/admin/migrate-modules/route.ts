@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { dbList, dbSet } from "@/lib/db";
-import { migrateModule, isVipModule, teacherClassValueByModule, VIP_DEFAULT_TOTAL, vipPlanTotal } from "@/lib/course-modules";
+import { migrateModule, isVipModule, VIP_DEFAULT_TOTAL, vipPlanTotal } from "@/lib/course-modules";
+import { configuredTeacherClassValue } from "@/lib/course-module-values.server";
 
 type Row = Record<string, unknown>;
 
@@ -13,7 +14,7 @@ function canAdmin(perfil: string) {
   return r.includes("admin") || r.includes("coord") || r.includes("dire") || r.includes("gestor");
 }
 
-function migrateStudent(s: Row): { record: Row; changed: boolean; from: string; to: string } {
+async function migrateStudent(s: Row): Promise<{ record: Row; changed: boolean; from: string; to: string }> {
   const oldModule = text(s.modulo || s.modalidade);
   const newModule = migrateModule(oldModule);
   const isVip = isVipModule(newModule);
@@ -24,7 +25,7 @@ function migrateStudent(s: Row): { record: Row; changed: boolean; from: string; 
     ...s,
     modulo: newModule,
     modalidade: newModule,
-    valor_professor_aula: teacherClassValueByModule(newModule),
+    valor_professor_aula: await configuredTeacherClassValue(newModule),
     vip_tipo_plano: isVip ? text(s.vip_tipo_plano || "Pacote 10 aulas") : "",
     vip_aulas_total: isVip ? vipTotal : 0,
     vip_aulas_restantes: isVip ? vipRestantes : 0,
@@ -38,7 +39,7 @@ function migrateStudent(s: Row): { record: Row; changed: boolean; from: string; 
   return { record, changed: oldModule !== newModule, from: oldModule, to: newModule };
 }
 
-function migrateClass(c: Row): { record: Row; changed: boolean; from: string; to: string } {
+async function migrateClass(c: Row): Promise<{ record: Row; changed: boolean; from: string; to: string }> {
   const oldModule = text(c.modulo || c.tipo_aula || c.modalidade);
   const newModule = migrateModule(oldModule);
   const record: Row = {
@@ -46,7 +47,7 @@ function migrateClass(c: Row): { record: Row; changed: boolean; from: string; to
     modulo: newModule,
     tipo_aula: newModule,
     modalidade: newModule.toLowerCase().includes("online") ? "Online" : "Presencial",
-    valor_aula: teacherClassValueByModule(newModule) || num(c.valor_aula),
+    valor_aula: await configuredTeacherClassValue(newModule) || num(c.valor_aula),
   };
   if (oldModule !== newModule) record.modulo_legado = oldModule;
   return { record, changed: oldModule !== newModule, from: oldModule, to: newModule };
@@ -63,8 +64,10 @@ export async function POST() {
     dbList<Row>("classes.json"),
   ]);
 
-  const studentResults = students.map(migrateStudent);
-  const classResults = classes.map(migrateClass);
+  const [studentResults, classResults] = await Promise.all([
+    Promise.all(students.map(migrateStudent)),
+    Promise.all(classes.map(migrateClass)),
+  ]);
   await Promise.all([
     dbSet("students.json", studentResults.map((r) => r.record)),
     dbSet("classes.json", classResults.map((r) => r.record)),
